@@ -99,9 +99,91 @@ export const kindFromExt = (path: string): Kind | null => {
   return null;
 };
 
+/* ---------------- 参数解析（空格 + 引号感知） ---------------- */
+
+export interface ParsedArgs {
+  args: string[];
+  error: string | null;
+}
+
+/**
+ * 单一文本框参数解析：按空格切分，支持成对引号包裹的带空格参数，
+ * 例如 `--port "80 80"` → ["--port", "80 80"]。引号不闭合 → 报错。
+ */
+export function parseArgs(input: string): ParsedArgs {
+  const args: string[] = [];
+  let cur = "";
+  let inSingle = false;
+  let inDouble = false;
+  let hasToken = false;
+  for (let i = 0; i < input.length; i++) {
+    const c = input[i];
+    if (c === "\\" && input[i + 1] === '"') {
+      cur += '"';
+      i++;
+      hasToken = true;
+      continue;
+    }
+    if (c === '"' && !inSingle) {
+      inDouble = !inDouble;
+      hasToken = true;
+      continue;
+    }
+    if (c === "'" && !inDouble) {
+      inSingle = !inSingle;
+      hasToken = true;
+      continue;
+    }
+    if ((c === " " || c === "\t") && !inSingle && !inDouble) {
+      if (hasToken) {
+        args.push(cur);
+        cur = "";
+        hasToken = false;
+      }
+      continue;
+    }
+    cur += c;
+    hasToken = true;
+  }
+  if (inSingle || inDouble) {
+    return { args: [], error: "引号未闭合：参数解析失败，请检查 \" 或 ' 是否成对" };
+  }
+  if (hasToken) args.push(cur);
+  return { args, error: null };
+}
+
+/* ---------------- 路径存在性（模拟文件系统） ---------------- */
+
+/** 原型内置的模拟文件系统白名单；真实实现为 Path::exists() 校验 */
+const KNOWN_FS = [
+  "C:\\Program Files\\Ollama\\ollama.exe",
+  "C:\\tools\\ollama\\ollama.exe",
+  "C:\\srv\\gateway\\api-gateway.exe",
+  "C:\\srv\\router\\router.exe",
+  "C:\\srv\\metrics\\exporter.exe",
+  "C:\\tools\\frp\\frpc.exe",
+  "C:\\tools\\watchdog\\watchdog.exe",
+  "C:\\scripts\\backup-db.bat",
+  "C:\\scripts\\sync.bat",
+  "C:\\scripts\\ship-logs.ps1",
+  "C:\\Windows\\System32\\ping.exe",
+  "C:\\Windows\\System32\\notepad.exe",
+  "C:\\Windows\\System32\\ipconfig.exe",
+];
+
+const normPath = (p: string) => p.trim().toLowerCase().replace(/\//g, "\\");
+
+export function pathExists(path: string, extra: string[] = []): boolean {
+  const n = normPath(path);
+  if (!n) return false;
+  if (n.startsWith("c:\\users\\demo\\")) return true; // 通过「浏览…」选择的文件一律视为存在
+  return [...KNOWN_FS, ...extra].some((k) => normPath(k) === n);
+}
+
 export const buildCommand = (kind: Kind, path: string, args: string) => {
   const q = (s: string) => (/\s/.test(s) ? `"${s}"` : s);
-  const a = args.trim() ? ` ${args.trim()}` : "";
+  const { args: tokens } = parseArgs(args);
+  const a = tokens.length ? " " + tokens.map(q).join(" ") : "";
   if (kind === "exe") return `${q(path)}${a}`;
   if (kind === "bat") return `cmd /c ${q(path)}${a}`;
   return `powershell -ExecutionPolicy Bypass -File ${q(path)}${a}`;
@@ -205,6 +287,14 @@ export function useSimulator() {
   const appStartRef = useRef(Date.now());
   const scriptedCrashRef = useRef(false);
 
+  /* 故障注入开关（一次性）：下一次 spawn 将失败，用于演示启动失败反馈链路 */
+  const [faultInject, setFaultInjectState] = useState(false);
+  const faultInjectRef = useRef(false);
+  const setFaultInject = useCallback((v: boolean) => {
+    faultInjectRef.current = v;
+    setFaultInjectState(v);
+  }, []);
+
   const later = useCallback((fn: () => void, ms: number) => {
     const id = window.setTimeout(() => {
       timersRef.current = timersRef.current.filter((x) => x !== id);
@@ -247,6 +337,40 @@ export function useSimulator() {
     const wasRestart = task.startedAt !== null || task.restarts > 0;
     patchTask(id, { state: "starting", lastError: null, exitCode: null, backoffUntil: null });
     pushLog(id, "SYS", `派生子进程 · CREATE_NO_WINDOW · cwd=${task.cwd || task.path}`);
+
+    /* ── 故障注入（一次性）：模拟 CreateProcessW 失败 → 完整反馈链路 ── */
+    if (faultInjectRef.current) {
+      faultInjectRef.current = false;
+      setFaultInject(false);
+      startingRef.current.delete(id);
+      const err = "CreateProcessW 失败: The system cannot find the file specified. (os error 2)";
+      const nowTs = Date.now();
+      pushLog(id, "ERR", `派生失败 · ${err}`);
+      pushLog(id, "SYS", "启动失败反馈链路已触发：托盘通知 + 卡片红框 + 错误详情");
+      toast("err", `任务 "${task.name}" 启动失败：${err}`);
+      if (task.strategy === "never") {
+        patchTask(id, { state: "stopped", lastError: `启动失败 · ${err}（策略 never，不重试）` });
+        return;
+      }
+      const recent = [...task.crashTimes.filter((t) => nowTs - t < BREAKER_WINDOW), nowTs];
+      if (recent.length >= BREAKER_MAX) {
+        patchTask(id, {
+          state: "fused", crashTimes: [], backoffUntil: null,
+          lastError: `熔断触发：窗口内启动失败 ${BREAKER_MAX} 次，自动重试已暂停`,
+        });
+        pushLog(id, "ERR", `熔断触发：滑动窗口 ${BREAKER_WINDOW / 1000}s 内失败 ${BREAKER_MAX} 次 → 暂停自动重试`);
+        toast("warn", `任务 "${task.name}" 已熔断，需手动干预`);
+      } else {
+        const delay = Math.min(2 ** (task.backoffAttempt + 1), 64) * 1000;
+        patchTask(id, {
+          state: "backoff", crashTimes: recent, backoffUntil: nowTs + delay,
+          backoffAttempt: task.backoffAttempt + 1, lastError: `启动失败 · ${err}`,
+        });
+        pushLog(id, "WARN", `启动失败计入熔断窗口 (${recent.length}/${BREAKER_MAX}) → 指数退避 ${delay / 1000}s 后重试`);
+      }
+      return;
+    }
+
     later(() => {
       startingRef.current.delete(id);
       const cur = tasksRef.current.find((t) => t.id === id);
@@ -502,6 +626,8 @@ export function useSimulator() {
     runningCount,
     startTask, stopTask, restartTask, startAll, stopAll,
     crashTask, resetBreaker, addTask, updateTask, deleteTask, clearLogs,
+    faultInject, setFaultInject,
+    notify: toast,
   };
 }
 

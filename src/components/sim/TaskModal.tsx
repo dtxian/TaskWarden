@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import type { Kind, SimTask, TaskDraft } from "../../sim/useSimulator";
-import { buildCommand, kindFromExt } from "../../sim/useSimulator";
-import { IconFolder, IconX } from "../ui";
+import { buildCommand, kindFromExt, parseArgs, pathExists } from "../../sim/useSimulator";
+import { IconCheck, IconCopy, IconFile, IconFolder, IconX } from "../ui";
 
 /* ------------------------------------------------------------------ */
 /* 任务编辑器（新增 / 编辑）+ 删除二次确认                                */
@@ -29,8 +29,18 @@ export default function TaskModal({ initial, allTasks, onClose, onSubmit }: Prop
       : emptyDraft(),
   );
   const [errs, setErrs] = useState<Record<string, string>>({});
+  const [copiedPath, setCopiedPath] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const editing = initial !== null;
+  const parsed = parseArgs(d.args);
+
+  const copyPath = async () => {
+    try {
+      await navigator.clipboard.writeText("%APPDATA%\\Sentinel\\config.toml");
+      setCopiedPath(true);
+      window.setTimeout(() => setCopiedPath(false), 1500);
+    } catch { /* 剪贴板不可用时静默 */ }
+  };
 
   // 环检测：候选依赖若（传递地）依赖本任务则禁用
   const forbidden = useMemo(() => {
@@ -58,7 +68,11 @@ export default function TaskModal({ initial, allTasks, onClose, onSubmit }: Prop
   const validate = (): boolean => {
     const e: Record<string, string> = {};
     if (!d.name.trim()) e.name = "任务名不能为空";
-    if (!/\.(exe|bat|cmd|ps1)$/i.test(d.path)) e.path = "仅支持 .exe / .bat / .cmd / .ps1";
+    if (!d.path.trim()) e.path = "路径不能为空";
+    else if (!/\.(exe|bat|cmd|ps1)$/i.test(d.path)) e.path = "仅支持 .exe / .bat / .cmd / .ps1";
+    else if (!pathExists(d.path, allTasks.map((t) => t.path)))
+      e.path = "路径不存在（Sentinel 启动前校验失败）—— 请用「浏览…」选择文件，或核对路径";
+    if (parsed.error) e.args = parsed.error;
     if (d.health === "tcp" && !/^[\w.:-]+:\d+$/.test(d.healthTarget)) e.health = "TCP 目标格式：host:port";
     if (d.health === "http" && !/^https?:\/\/.+/.test(d.healthTarget)) e.health = "HTTP 目标需以 http(s):// 开头";
     if (d.health === "ready" && !d.healthTarget.trim()) e.health = "请填写就绪关键字";
@@ -127,14 +141,40 @@ export default function TaskModal({ initial, allTasks, onClose, onSubmit }: Prop
                 }}
               />
             </div>
-            {errs.path && <p className="mt-1 text-[10.5px] text-[#FF7B70]">{errs.path}</p>}
+            {errs.path ? (
+              <p className="mt-1 text-[10.5px] text-[#FF7B70]">{errs.path}</p>
+            ) : (
+              <p className="mt-1 font-mono text-[9.5px] text-[var(--eg-muted)]/70">
+                启动前校验 · 模拟文件系统：「浏览…」选择的文件恒可用，亦可尝试 C:\Windows\System32\ping.exe
+              </p>
+            )}
           </div>
 
           {/* 参数 + 工作目录 */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={labelCls}>启动参数</label>
-              <input className={inputCls} value={d.args} onChange={(e) => setD({ ...d, args: e.target.value })} placeholder="--port 8080" />
+              <label className={labelCls}>启动参数（空格切分 · 引号包裹带空格参数）</label>
+              <input
+                className={inputCls}
+                value={d.args}
+                onChange={(e) => setD({ ...d, args: e.target.value })}
+                placeholder={'--port 8080 --tag "a b"'}
+              />
+              {errs.args ? (
+                <p className="mt-1 text-[10.5px] text-[#FF7B70]">{errs.args}</p>
+              ) : parsed.args.length > 0 ? (
+                <div className="mt-1.5 flex flex-wrap items-center gap-1">
+                  <span className="font-mono text-[9.5px] text-[var(--eg-muted)]">解析预览 argv →</span>
+                  {parsed.args.map((a, i) => (
+                    <span
+                      key={`${i}-${a}`}
+                      className="rounded-[4px] border border-[rgba(122,212,232,0.35)] bg-[rgba(122,212,232,0.08)] px-1.5 py-px font-mono text-[10px] text-[#7AD4E8]"
+                    >
+                      {a}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
             </div>
             <div>
               <label className={labelCls}>工作目录（可选）</label>
@@ -229,6 +269,23 @@ export default function TaskModal({ initial, allTasks, onClose, onSubmit }: Prop
             <code className="block break-all font-mono text-[11.5px] leading-relaxed text-[var(--eg-text)]">
               {d.path ? buildCommand(d.kind, d.path, d.args) : "— 选择程序后自动生成 —"}
             </code>
+          </div>
+
+          {/* 配置文件位置 */}
+          <div className="flex items-center gap-2.5 rounded-[8px] border border-[var(--eg-line-soft)] bg-[var(--eg-inset)] px-3 py-2">
+            <IconFile size={13} className="shrink-0 text-[#FF9557]" />
+            <div className="min-w-0 flex-1">
+              <div className="truncate font-mono text-[11px] font-semibold text-[var(--eg-text)]">%APPDATA%\Sentinel\config.toml</div>
+              <div className="text-[9.5px] text-[var(--eg-muted)]">配置文件位置 · 原子写入（临时文件 + rename）· 可直接复制备份</div>
+            </div>
+            <button
+              type="button"
+              onClick={copyPath}
+              className="flex shrink-0 items-center gap-1 rounded-[5px] border border-[var(--eg-line)] px-2 py-1 font-mono text-[10px] text-[var(--eg-muted)] transition-colors hover:border-[#FF9557] hover:text-[#FF9557]"
+            >
+              {copiedPath ? <IconCheck size={10} className="text-[#3ECF6E]" /> : <IconCopy size={10} />}
+              {copiedPath ? "已复制" : "复制路径"}
+            </button>
           </div>
         </div>
 

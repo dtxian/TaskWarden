@@ -136,7 +136,9 @@ export default function App() {
           <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 rounded-[10px] border border-ink-700 bg-ink-850/60 px-4 py-3 font-mono text-[10.5px] text-fog-500">
             <span className="font-bold tracking-widest text-[#FF9557]">操作提示</span>
             <span>▸ 点击卡片选中并查看其日志</span>
-            <span>▸ 「模拟异常」演示重启策略 → 连续 3 次触发熔断</span>
+            <span>▸ 添加任务：引号参数实时解析预览，路径不存在红字拦截</span>
+            <span>▸ 点亮标题栏「故障注入」：下次启动 spawn 失败全链路反馈</span>
+            <span>▸ 「试双开」被单实例互斥体拦截并激活已有窗口</span>
             <span>▸ 停止上游任务观察 DAG 级联</span>
             <span>▸ 点窗口 × 收进托盘，右键托盘图标可退出</span>
           </div>

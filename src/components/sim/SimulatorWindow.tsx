@@ -3,7 +3,7 @@ import type { SimTask, Simulator } from "../../sim/useSimulator";
 import { fmtDur } from "../../sim/useSimulator";
 import {
   IconCpu, IconFile, IconGpu, IconMoon, IconPlay, IconPlus, IconRam, IconRestore,
-  IconShield, IconStop, IconSun, IconTemp, IconTrayMenu, IconWindowOff, IconX,
+  IconShield, IconStop, IconSun, IconTemp, IconTrayMenu, IconWindowOff, IconX, IconBolt,
 } from "../ui";
 import LogPanel from "./LogPanel";
 import TaskCard from "./TaskCard";
@@ -24,6 +24,7 @@ export default function SimulatorWindow({ sim }: { sim: Simulator }) {
   const [modal, setModal] = useState<Modal>(null);
   const [confirmDel, setConfirmDel] = useState<SimTask | null>(null);
   const [trayMenu, setTrayMenu] = useState(false);
+  const [nudge, setNudge] = useState(0); // 单实例拦截闪光
 
   const sorted = useMemo(
     () => [...sim.tasks].sort((a, b) => ORDER[a.state] - ORDER[b.state] || a.name.localeCompare(b.name)),
@@ -48,7 +49,12 @@ export default function SimulatorWindow({ sim }: { sim: Simulator }) {
     <div className="relative">
       {view === "window" ? (
         /* ============ 主窗口 ============ */
-        <div className={`egui ${theme === "light" ? "eg-light" : ""} relative overflow-hidden rounded-xl border border-[var(--eg-line)] bg-[var(--eg-bg)] shadow-[0_40px_120px_-30px_rgba(0,0,0,0.85)]`}>
+        <div
+          className={`egui ${theme === "light" ? "eg-light" : ""} relative overflow-hidden rounded-xl border border-[var(--eg-line)] bg-[var(--eg-bg)] shadow-[0_40px_120px_-30px_rgba(0,0,0,0.85)]${nudge ? " instance-flash" : ""}`}
+          onAnimationEnd={(e) => {
+            if (e.animationName === "instance-flash") setNudge(0);
+          }}
+        >
           {/* 标题栏 */}
           <div className="flex items-center gap-2 border-b border-[var(--eg-line)] bg-[var(--eg-inset)] px-3 py-2">
             <IconShield size={16} className="text-[#FF7A29]" />
@@ -59,6 +65,27 @@ export default function SimulatorWindow({ sim }: { sim: Simulator }) {
               <span className="h-1 w-1 rounded-full bg-[#3ECF6E] pulse-dot" /> 单实例 · Global\SentinelGuard
             </span>
             <span className="ml-auto flex items-center gap-1">
+              <button
+                className="mr-1 hidden items-center gap-1 rounded-[5px] border border-[var(--eg-line)] px-2 py-[3px] font-mono text-[9.5px] text-[var(--eg-muted)] transition-colors hover:border-[#7AD4E8] hover:text-[#7AD4E8] md:flex"
+                title="模拟再次运行 Sentinel.exe：单实例互斥体将拦截新进程并激活已有窗口"
+                onClick={() => {
+                  sim.notify(
+                    "info",
+                    '单实例拦截：CreateMutexW("Global\\SentinelGuard") 返回 ERROR_ALREADY_EXISTS —— 新进程已退出，仅激活已有窗口',
+                  );
+                  setNudge(Date.now());
+                }}
+              >
+                试双开
+              </button>
+              <button
+                className={`${chipBtn} ${sim.faultInject ? "!bg-[rgba(245,184,75,0.16)] !text-[#F5B84B]" : ""}`}
+                style={sim.faultInject ? { boxShadow: "0 0 14px -2px rgba(245,184,75,0.55)" } : undefined}
+                title="故障注入（一次性）：下一次启动将在 spawn 处失败，演示启动失败反馈：托盘通知 + 卡片红框 + 错误详情"
+                onClick={() => sim.setFaultInject(!sim.faultInject)}
+              >
+                <IconBolt size={13} />
+              </button>
               <button className={chipBtn} title="切换深/浅主题" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
                 {theme === "dark" ? <IconSun size={13} /> : <IconMoon size={13} />}
               </button>
