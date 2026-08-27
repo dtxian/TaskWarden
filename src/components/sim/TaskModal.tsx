@@ -31,6 +31,7 @@ export default function TaskModal({ initial, allTasks, onClose, onSubmit }: Prop
   const [errs, setErrs] = useState<Record<string, string>>({});
   const [copiedPath, setCopiedPath] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const dirRef = useRef<HTMLInputElement>(null);
   const editing = initial !== null;
   const parsed = parseArgs(d.args);
 
@@ -150,35 +151,64 @@ export default function TaskModal({ initial, allTasks, onClose, onSubmit }: Prop
             )}
           </div>
 
-          {/* 参数 + 工作目录 */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className={labelCls}>启动参数（空格切分 · 引号包裹带空格参数）</label>
-              <input
-                className={inputCls}
-                value={d.args}
-                onChange={(e) => setD({ ...d, args: e.target.value })}
-                placeholder={'--port 8080 --tag "a b"'}
-              />
-              {errs.args ? (
-                <p className="mt-1 text-[10.5px] text-[#FF7B70]">{errs.args}</p>
-              ) : parsed.args.length > 0 ? (
-                <div className="mt-1.5 flex flex-wrap items-center gap-1">
-                  <span className="font-mono text-[9.5px] text-[var(--eg-muted)]">解析预览 argv →</span>
-                  {parsed.args.map((a, i) => (
-                    <span
-                      key={`${i}-${a}`}
-                      className="rounded-[4px] border border-[rgba(122,212,232,0.35)] bg-[rgba(122,212,232,0.08)] px-1.5 py-px font-mono text-[10px] text-[#7AD4E8]"
-                    >
-                      {a}
-                    </span>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-            <div>
-              <label className={labelCls}>工作目录（可选）</label>
+          {/* 启动参数（多行大文本框） */}
+          <div>
+            <label className={labelCls}>
+              启动参数（多行 · 空格/换行切分，引号包裹带空格参数）
+              <span className="ml-2 font-mono text-[9px] font-normal text-[var(--eg-muted)]/70">可拖拽右下角扩展</span>
+            </label>
+            <textarea
+              className={`${inputCls} min-h-[104px] resize-y leading-[1.8]`}
+              rows={4}
+              value={d.args}
+              onChange={(e) => setD({ ...d, args: e.target.value })}
+              placeholder={'--port 8080\n--log-dir "C:\\logs my app"\n--workers 4'}
+              spellCheck={false}
+            />
+            {errs.args ? (
+              <p className="mt-1 text-[10.5px] text-[#FF7B70]">{errs.args}</p>
+            ) : parsed.args.length > 0 ? (
+              <div className="mt-1.5 flex flex-wrap items-center gap-1 rounded-[7px] border border-[var(--eg-line-soft)] bg-[var(--eg-inset)] px-2.5 py-1.5">
+                <span className="font-mono text-[9.5px] font-semibold tracking-wider text-[var(--eg-muted)]">解析预览 argv →</span>
+                {parsed.args.map((a, i) => (
+                  <span
+                    key={`${i}-${a}`}
+                    className="rounded-[4px] border border-[rgba(122,212,232,0.35)] bg-[rgba(122,212,232,0.08)] px-1.5 py-px font-mono text-[10px] text-[#7AD4E8]"
+                  >
+                    {a}
+                  </span>
+                ))}
+                <span className="ml-auto font-mono text-[9px] text-[var(--eg-muted)]/70">{parsed.args.length} 个参数</span>
+              </div>
+            ) : null}
+          </div>
+
+          {/* 工作目录（带目录浏览） */}
+          <div>
+            <label className={labelCls}>工作目录（可选）</label>
+            <div className="flex gap-2">
               <input className={inputCls} value={d.cwd} onChange={(e) => setD({ ...d, cwd: e.target.value })} placeholder="C:\tools" />
+              <button
+                type="button"
+                onClick={() => dirRef.current?.click()}
+                className="flex shrink-0 items-center gap-1.5 rounded-[6px] border border-[var(--eg-line)] bg-[var(--eg-inset)] px-3 text-[11.5px] font-medium text-[var(--eg-text)] transition-colors hover:border-[#FF7A29] hover:text-[#FF9557]"
+              >
+                <IconFolder size={13} /> 选目录…
+              </button>
+              <input
+                ref={dirRef}
+                type="file"
+                className="hidden"
+                {...({ webkitdirectory: "" } as Record<string, string>)}
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) {
+                    const top = f.webkitRelativePath.split("/")[0];
+                    setD({ ...d, cwd: `C:\\Users\\demo\\${top}` });
+                  }
+                  e.currentTarget.value = "";
+                }}
+              />
             </div>
           </div>
 

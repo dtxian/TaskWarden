@@ -134,7 +134,7 @@ export function parseArgs(input: string): ParsedArgs {
       hasToken = true;
       continue;
     }
-    if ((c === " " || c === "\t") && !inSingle && !inDouble) {
+    if ((c === " " || c === "\t" || c === "\n" || c === "\r") && !inSingle && !inDouble) {
       if (hasToken) {
         args.push(cur);
         cur = "";
