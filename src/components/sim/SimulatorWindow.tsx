@@ -59,19 +59,19 @@ export default function SimulatorWindow({ sim }: { sim: Simulator }) {
           <div className="flex items-center gap-2 border-b border-[var(--eg-line)] bg-[var(--eg-inset)] px-3 py-2">
             <IconShield size={16} className="text-[#FF7A29]" />
             <span className="font-display text-[12.5px] font-bold tracking-wide text-[var(--eg-text)]">
-              Sentinel <span className="font-mono text-[10px] font-normal text-[var(--eg-muted)]">— 轻量级任务守护监督器 v0.1.0</span>
+              TaskWarden <span className="font-mono text-[10px] font-normal text-[var(--eg-muted)]">— 轻量级任务守护监督器 v0.1.0</span>
             </span>
             <span className="ml-2 hidden items-center gap-1 rounded-[4px] border border-[rgba(62,207,110,0.4)] bg-[rgba(62,207,110,0.08)] px-1.5 py-px font-mono text-[9.5px] text-[#3ECF6E] md:flex">
-              <span className="h-1 w-1 rounded-full bg-[#3ECF6E] pulse-dot" /> 单实例 · Global\SentinelGuard
+              <span className="h-1 w-1 rounded-full bg-[#3ECF6E] pulse-dot" /> 单实例 · Global\TaskWarden
             </span>
             <span className="ml-auto flex items-center gap-1">
               <button
                 className="mr-1 hidden items-center gap-1 rounded-[5px] border border-[var(--eg-line)] px-2 py-[3px] font-mono text-[9.5px] text-[var(--eg-muted)] transition-colors hover:border-[#7AD4E8] hover:text-[#7AD4E8] md:flex"
-                title="模拟再次运行 Sentinel.exe：单实例互斥体将拦截新进程并激活已有窗口"
+                title="模拟再次运行 TaskWarden.exe：单实例互斥体将拦截新进程并激活已有窗口"
                 onClick={() => {
                   sim.notify(
                     "info",
-                    '单实例拦截：CreateMutexW("Global\\SentinelGuard") 返回 ERROR_ALREADY_EXISTS —— 新进程已退出，仅激活已有窗口',
+                    '单实例拦截：CreateMutexW("Global\\TaskWarden") 返回 ERROR_ALREADY_EXISTS —— 新进程已退出，仅激活已有窗口',
                   );
                   setNudge(Date.now());
                 }}
@@ -178,7 +178,7 @@ export default function SimulatorWindow({ sim }: { sim: Simulator }) {
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-[var(--eg-line)] bg-[var(--eg-inset)] px-4 py-1.5 font-mono text-[10px] text-[var(--eg-muted)]">
             <span className="flex items-center gap-1.5">
               <IconFile size={11} className="text-[#FF9557]" />
-              %APPDATA%\Sentinel\config.toml
+              %APPDATA%\TaskWarden\config.toml
             </span>
             <span>派生 {sim.stats.spawned} · 重启 {sim.stats.restarts}</span>
             <span className={`hidden truncate sm:block ${sim.stats.lastError ? "text-[#FF7B70]" : ""}`}>
@@ -229,7 +229,7 @@ export default function SimulatorWindow({ sim }: { sim: Simulator }) {
           {view === "tray" ? (
             <>
               <IconWindowOff size={40} className="float-slow text-[#FF9557]" />
-              <div className="font-display text-[16px] font-bold text-[var(--eg-text)]">主窗口已隐藏 · Sentinel 驻留系统托盘</div>
+              <div className="font-display text-[16px] font-bold text-[var(--eg-text)]">主窗口已隐藏 · TaskWarden 驻留系统托盘</div>
               <p className="max-w-[460px] text-[12.5px] leading-relaxed text-[var(--eg-muted)]">
                 守护未中断：{sim.runningCount} 个任务仍在后台运行，健康探针与熔断机制持续工作。
                 点击右下角托盘图标恢复窗口，右键可呼出菜单。
@@ -244,7 +244,7 @@ export default function SimulatorWindow({ sim }: { sim: Simulator }) {
           ) : (
             <>
               <IconShield size={40} className="text-[#3ECF6E]" />
-              <div className="font-display text-[16px] font-bold text-[var(--eg-text)]">Sentinel 已安全退出</div>
+              <div className="font-display text-[16px] font-bold text-[var(--eg-text)]">TaskWarden 已安全退出</div>
               <p className="max-w-[480px] font-mono text-[11.5px] leading-relaxed text-[var(--eg-muted)]">
                 全部子进程已随 Job Object 级联终止 · config.toml 已原子落盘 · 日志文件已关闭
               </p>
@@ -252,7 +252,7 @@ export default function SimulatorWindow({ sim }: { sim: Simulator }) {
                 onClick={() => setView("window")}
                 className="flex items-center gap-2 rounded-[7px] bg-[#3ECF6E] px-5 py-2 text-[13px] font-bold text-[#062b14] transition-all hover:brightness-110 active:scale-[0.97]"
               >
-                <IconPlay size={12} /> 重新启动 Sentinel
+                <IconPlay size={12} /> 重新启动 TaskWarden
               </button>
             </>
           )}
@@ -285,7 +285,7 @@ export default function SimulatorWindow({ sim }: { sim: Simulator }) {
             </span>
             <span className="text-left leading-tight">
               <span className="block text-[11.5px] font-bold text-fog-100">
-                {view === "tray" ? "Sentinel · 托盘守护中" : "Sentinel · 已退出"}
+                {view === "tray" ? "TaskWarden · 托盘守护中" : "TaskWarden · 已退出"}
               </span>
               <span className="block font-mono text-[9.5px] text-fog-500">
                 {view === "tray" ? `左键恢复 · 右键菜单 · ${sim.runningCount} 运行中` : "点击重新演示"}

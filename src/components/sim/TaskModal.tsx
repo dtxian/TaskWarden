@@ -37,7 +37,7 @@ export default function TaskModal({ initial, allTasks, onClose, onSubmit }: Prop
 
   const copyPath = async () => {
     try {
-      await navigator.clipboard.writeText("%APPDATA%\\Sentinel\\config.toml");
+      await navigator.clipboard.writeText("%APPDATA%\\TaskWarden\\config.toml");
       setCopiedPath(true);
       window.setTimeout(() => setCopiedPath(false), 1500);
     } catch { /* 剪贴板不可用时静默 */ }
@@ -72,7 +72,7 @@ export default function TaskModal({ initial, allTasks, onClose, onSubmit }: Prop
     if (!d.path.trim()) e.path = "路径不能为空";
     else if (!/\.(exe|bat|cmd|ps1)$/i.test(d.path)) e.path = "仅支持 .exe / .bat / .cmd / .ps1";
     else if (!pathExists(d.path, allTasks.map((t) => t.path)))
-      e.path = "路径不存在（Sentinel 启动前校验失败）—— 请用「浏览…」选择文件，或核对路径";
+      e.path = "路径不存在（TaskWarden 启动前校验失败）—— 请用「浏览…」选择文件，或核对路径";
     if (parsed.error) e.args = parsed.error;
     if (d.health === "tcp" && !/^[\w.:-]+:\d+$/.test(d.healthTarget)) e.health = "TCP 目标格式：host:port";
     if (d.health === "http" && !/^https?:\/\/.+/.test(d.healthTarget)) e.health = "HTTP 目标需以 http(s):// 开头";
@@ -305,7 +305,7 @@ export default function TaskModal({ initial, allTasks, onClose, onSubmit }: Prop
           <div className="flex items-center gap-2.5 rounded-[8px] border border-[var(--eg-line-soft)] bg-[var(--eg-inset)] px-3 py-2">
             <IconFile size={13} className="shrink-0 text-[#FF9557]" />
             <div className="min-w-0 flex-1">
-              <div className="truncate font-mono text-[11px] font-semibold text-[var(--eg-text)]">%APPDATA%\Sentinel\config.toml</div>
+              <div className="truncate font-mono text-[11px] font-semibold text-[var(--eg-text)]">%APPDATA%\TaskWarden\config.toml</div>
               <div className="text-[9.5px] text-[var(--eg-muted)]">配置文件位置 · 原子写入（临时文件 + rename）· 可直接复制备份</div>
             </div>
             <button

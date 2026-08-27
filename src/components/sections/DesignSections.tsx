@@ -133,7 +133,7 @@ export function ArchitectureSection() {
         <div className="lg:sticky lg:top-24 lg:self-start">
           <Reveal>
             <div className="rounded-[12px] border border-ink-700 bg-ink-850/70 p-5">
-              <p className="mb-4 font-mono text-[10px] font-semibold tracking-[0.22em] text-fog-600">LAYER STACK · crate::sentinel</p>
+              <p className="mb-4 font-mono text-[10px] font-semibold tracking-[0.22em] text-fog-600">LAYER STACK · crate::taskwarden</p>
               {LAYERS.map((l, i) => (
                 <React.Fragment key={l.no}>
                   <div
@@ -181,7 +181,7 @@ export function ArchitectureSection() {
                 <span className="h-2.5 w-2.5 rounded-full bg-[#F0564A]/80" />
                 <span className="h-2.5 w-2.5 rounded-full bg-[#F5B84B]/80" />
                 <span className="h-2.5 w-2.5 rounded-full bg-[#3ECF6E]/80" />
-                <span className="ml-2 font-mono text-[11px] text-fog-500">sentinel · 模块树（src/）</span>
+                <span className="ml-2 font-mono text-[11px] text-fog-500">taskwarden · 模块树（src/）</span>
               </div>
               <pre className="overflow-x-auto p-4 font-mono text-[11.5px] leading-[1.85] text-fog-300">{PROJECT_TREE}</pre>
             </div>

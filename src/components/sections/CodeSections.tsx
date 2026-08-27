@@ -101,7 +101,7 @@ export function TraySection() {
       <SectionHead
         no="03 / 托盘交互与健壮性"
         title="关掉窗口 ≠ 退出 · 守护从不间断"
-        desc="右上角 × 只是把 Sentinel 收进系统托盘：左键一键恢复，右键呼出菜单。真正的退出会通过 Job Object 级联终止所有子进程，并把 config.toml 原子落盘。"
+        desc="右上角 × 只是把 TaskWarden 收进系统托盘：左键一键恢复，右键呼出菜单。真正的退出会通过 Job Object 级联终止所有子进程，并把 config.toml 原子落盘。"
       />
 
       <div className="grid gap-4 lg:grid-cols-[1.15fr_1fr]">

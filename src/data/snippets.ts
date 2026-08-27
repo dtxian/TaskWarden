@@ -20,7 +20,7 @@ export const SNIPPETS: Snippet[] = [
     lang: "toml",
     title: "任务配置持久化",
     note: "全部任务收敛到一份 config.toml：per-task 重启策略、熔断窗口、健康探针与依赖声明。写入采用「临时文件 + 原子 rename」，杜绝半截配置。",
-    code: `# %APPDATA%\\Sentinel\\config.toml
+    code: `# %APPDATA%\\TaskWarden\\config.toml
 [settings]
 log_dir            = "logs"        # 每任务一个日志文件
 breaker_window_sec = 60            # 熔断滑动窗口
@@ -360,9 +360,9 @@ impl RingLog {
 use eframe::egui;
 
 fn main() -> eframe::Result<()> {
-    // ── 单实例保护：CreateMutexW("Global\\SentinelGuard") ──
+    // ── 单实例保护：CreateMutexW("Global\\TaskWarden") ──
     let _guard = infra::single_instance::acquire()
-        .expect("Sentinel 已在运行，请勿多开");
+        .expect("TaskWarden 已在运行，请勿多开");
 
     let supervisor = core::supervisor::Supervisor::from_config(
         &infra::config::load()?,
@@ -372,16 +372,16 @@ fn main() -> eframe::Result<()> {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([1280.0, 820.0])
             .with_min_inner_size([960.0, 640.0])
-            .with_title("Sentinel — 任务守护监督器"),
+            .with_title("TaskWarden — 任务守护监督器"),
         ..Default::default()
     };
 
-    eframe::run_native("sentinel", options, Box::new(move |cc| {
+    eframe::run_native("taskwarden", options, Box::new(move |cc| {
         // 关闭请求 → 隐藏窗口 + 托盘常驻（而非退出）
         cc.egui_ctx.options_mut(|o| {
             o.viewport.close_button = false;
         });
-        let app = gui::app::SentinelApp::new(cc, supervisor);
+        let app = gui::app::TaskWardenApp::new(cc, supervisor);
         tray::install(&cc.egui_ctx, app.handle());
         Ok(Box::new(app))
     }))
@@ -389,10 +389,10 @@ fn main() -> eframe::Result<()> {
 
 /* tray.rs —— 左键恢复 / 右键菜单 / 气泡通知 */
 pub fn install(ctx: &egui::Context, app: eframe::AppHandle) {
-    let icon = include_bytes!("../assets/sentinel.ico");
+    let icon = include_bytes!("../assets/taskwarden.ico");
     let tray = tray_icon::TrayIconBuilder::new()
         .with_icon(load_icon(icon))
-        .with_tooltip("Sentinel · 3 个任务运行中")
+        .with_tooltip("TaskWarden · 3 个任务运行中")
         .with_menu(&Menu::with_items(&[
             &MenuItem::new("显示主窗口", true, None),
             &PredefinedMenuItem::separator(),

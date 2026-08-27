@@ -5,7 +5,7 @@ import { IconShield } from "./components/ui";
 import { useSimulator } from "./sim/useSimulator";
 
 /* ------------------------------------------------------------------ */
-/* Sentinel · 轻量级后台任务守护监督器 —— 交互原型 + 工程设计文档           */
+/* TaskWarden · 轻量级后台任务守护监督器 —— 交互原型 + 工程设计文档         */
 /* ------------------------------------------------------------------ */
 
 const NAV = [
@@ -25,7 +25,7 @@ function Nav() {
             <IconShield size={17} />
           </span>
           <span className="font-display text-[15px] font-bold tracking-wide text-fog-100">
-            Sentinel
+            TaskWarden
             <span className="ml-2 hidden font-mono text-[9.5px] font-normal tracking-[0.18em] text-fog-600 sm:inline">TASK GUARDIAN</span>
           </span>
         </a>
@@ -62,7 +62,7 @@ function Footer() {
               <IconShield size={18} />
             </span>
             <div>
-              <div className="font-display text-[16px] font-bold text-fog-100">Sentinel</div>
+              <div className="font-display text-[16px] font-bold text-fog-100">TaskWarden</div>
               <div className="font-mono text-[9.5px] tracking-[0.2em] text-fog-600">LIGHTWEIGHT TASK GUARDIAN</div>
             </div>
           </div>
@@ -83,7 +83,7 @@ function Footer() {
         <div>
           <div className="font-mono text-[10.5px] font-semibold tracking-[0.22em] text-fog-600">说明</div>
           <p className="mt-3 text-[11.5px] leading-relaxed text-fog-600">
-            本页为 Sentinel 项目的<strong className="text-fog-300">高保真交互原型与工程设计文档</strong>：原型中的进程、PID、资源指标均为本地模拟数据，不启动任何真实进程；架构与代码片段为 Rust 原生分层实现的设计基线。
+            本页为 TaskWarden 项目的<strong className="text-fog-300">高保真交互原型与工程设计文档</strong>：原型中的进程、PID、资源指标均为本地模拟数据，不启动任何真实进程；架构与代码片段为 Rust 原生分层实现的设计基线。
           </p>
         </div>
       </div>

@@ -2,7 +2,7 @@
 /* 站点静态内容：模块树 / 分层架构 / 工作流 / 托盘交互 / 性能 / 边界      */
 /* ------------------------------------------------------------------ */
 
-export const PROJECT_TREE = `sentinel/
+export const PROJECT_TREE = `taskwarden/
 ├─ Cargo.toml                # egui · eframe · serde · toml · windows · nvml
 └─ src/
    ├─ main.rs                # 入口：单实例互斥体 → eframe::run_native
@@ -123,7 +123,7 @@ export const PROMISES = [
 export const TRAY_BEHAVIORS = [
   {
     t: "关闭 = 最小化到托盘",
-    d: "点击右上角 × 并不退出：主窗口隐藏，Sentinel 收缩为托盘图标继续守护，气泡提示「已转入后台」。",
+    d: "点击右上角 × 并不退出：主窗口隐藏，TaskWarden 收缩为托盘图标继续守护，气泡提示「已转入后台」。",
     keys: ["点击 ×", "窗口隐藏", "托盘常驻"],
     icon: "minimize",
   },
@@ -142,7 +142,7 @@ export const TRAY_BEHAVIORS = [
 ];
 
 export const ROBUSTNESS = [
-  { t: "单实例保护", d: "CreateMutexW(\"Global\\\\SentinelGuard\")：多开时第二实例立即退出并提示，避免配置与进程树冲突。" },
+  { t: "单实例保护", d: "CreateMutexW(\"Global\\\\TaskWarden\")：多开时第二实例立即退出并提示，避免配置与进程树冲突。" },
   { t: "启动失败高亮", d: "派生失败触发托盘气泡通知，对应任务卡片红框闪烁高亮，错误原因直写在卡片与日志中。" },
   { t: "优雅停止超时", d: "exe 任务可配优雅窗口（默认 5s）：先发关闭信号，超时再 taskkill /T /F，兼顾体面与可靠。" },
   { t: "信息透明", d: "全局状态栏常驻显示 config.toml 路径、运行统计与上次错误，日志默认自动滚动、ERR 标红。" },
