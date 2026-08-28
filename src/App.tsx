@@ -138,7 +138,7 @@ function LandingApp() {
             <span>▸ 点击卡片选中并查看其日志</span>
             <span>▸ 添加任务：引号参数实时解析预览，路径不存在红字拦截</span>
             <span>▸ 点亮标题栏「故障注入」：下次启动 spawn 失败全链路反馈</span>
-            <span>▸ 「试双开」被单实例互斥体拦截并激活已有窗口</span>
+            <span>▸ 「试双开」被 single-instance 插件拦截并唤起已有窗口</span>
             <span>▸ 停止上游任务观察 DAG 级联</span>
             <span>▸ 点窗口 × 收进托盘，右键托盘图标可退出</span>
           </div>
