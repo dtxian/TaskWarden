@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  frontend:
+    name: 前端 · typecheck + 单测
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+
+  backend:
+    name: 后端 · cargo test (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      # tauri::generate_context! 编译期校验 frontendDist：先产出 dist
+      - run: npm ci
+      - run: npm run build
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~\.cargo\registry
+            ~\.cargo\bin
+            src-tauri\target
+          key: cargo-test-${{ runner.os }}-${{ hashFiles('src-tauri/Cargo.lock') }}
+      - run: cargo test --manifest-path src-tauri/Cargo.toml
+        env:
+          CARGO_TERM_COLOR: always

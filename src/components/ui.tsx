@@ -67,7 +67,33 @@ export const IconTemp = (p: IconProps) => (
   <svg {...base(p)}><path d="M10 4a2 2 0 0 1 4 0v9.2a4.5 4.5 0 1 1-4 0V4z" /><path d="M12 9v6" /><circle cx="12" cy="17.3" r="1.4" fill="currentColor" stroke="none" /></svg>
 );
 export const IconShield = (p: IconProps) => (
-  <svg {...base(p)}><path d="M12 2.8 20 6v6.2c0 5.3-3.4 9.2-8 10.9-4.6-1.7-8-5.6-8-10.9V6l8-3.2z" /><path d="M7.5 12h2.2l1.2-2.8 1.6 4.8 1.2-2h2.3" /></svg>
+  /* 品牌图标：与 exe 图标同一设计（深底渐变 + 渐变守护盾 + 心跳脉冲） */
+  <svg viewBox="0 0 24 24" width={p.size ?? 24} height={p.size ?? 24} className={p.className} role="img" aria-label="TaskWarden">
+    <defs>
+      <linearGradient id="twIcoBg" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stopColor="#1C222C" />
+        <stop offset="1" stopColor="#06080B" />
+      </linearGradient>
+      <linearGradient id="twIcoSh" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stopColor="#FFC191" />
+        <stop offset="0.5" stopColor="#FF8A3D" />
+        <stop offset="1" stopColor="#EF5C0A" />
+      </linearGradient>
+      <linearGradient id="twIcoPl" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0" stopColor="#FF9557" />
+        <stop offset="1" stopColor="#FFD9B8" />
+      </linearGradient>
+    </defs>
+    <rect x="0.5" y="0.5" width="23" height="23" rx="5.2" fill="url(#twIcoBg)" stroke="#FF7A29" strokeOpacity="0.28" strokeWidth="0.8" />
+    <path
+      d="M12 3.6 L18.3 6 V12.1 C18.3 16.6 15.6 19.7 12 21.2 C8.4 19.7 5.7 16.6 5.7 12.1 V6 Z"
+      fill="rgba(255,122,41,0.10)"
+      stroke="url(#twIcoSh)"
+      strokeWidth="1.5"
+      strokeLinejoin="round"
+    />
+    <path d="M8.2 12 H10.4 L11.5 9.5 L13.2 14 L14.4 11.9 H15.9" fill="none" stroke="url(#twIcoPl)" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
 );
 export const IconFolder = (p: IconProps) => (
   <svg {...base(p)}><path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" /></svg>

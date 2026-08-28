@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 
 /* ------------------------------------------------------------------ */
 /* TaskWarden 交互原型 —— 监督器行为模拟引擎                             */
@@ -174,6 +176,8 @@ const KNOWN_FS = [
 const normPath = (p: string) => p.trim().toLowerCase().replace(/\//g, "\\");
 
 export function pathExists(path: string, extra: string[] = []): boolean {
+  // Tauri 真实模式下路径校验交后端（Path::exists），浏览器/Pages 保留模拟白名单演示
+  if (isTauri) return true;
   const n = normPath(path);
   if (!n) return false;
   if (n.startsWith("c:\\users\\demo\\")) return true; // 通过「浏览…」选择的文件一律视为存在
@@ -239,7 +243,7 @@ const seedTasks = (): SimTask[] => [
   T("ollama-serve", "ollama-serve", "exe", "C:\\tools\\ollama\\ollama.exe", "serve", "C:\\tools\\ollama", "always", "tcp", "127.0.0.1:11434", 5, []),
   T("model-router", "model-router", "exe", "C:\\srv\\router\\router.exe", "--port 8080 --upstream 11434", "C:\\srv\\router", "on-failure", "http", "http://127.0.0.1:8080/health", 3, ["ollama-serve"]),
   T("frpc-tunnel", "frpc-tunnel", "exe", "C:\\tools\\frp\\frpc.exe", "-c frpc.toml", "C:\\tools\\frp", "on-failure", "tcp", "127.0.0.1:7000", 3, ["model-router"]),
-  T("log-shipper", "log-shipper", "ps1", "C:\\scripts\\ship-logs.ps1", "-target loki -batch 500", "C:\\scripts", "always", "ready", "stdout:ready", 0, []),
+  T("log-shipper", "log-shipper", "ps1", "C:\\scripts\\ship-logs.ps1", "-target loki -batch 500", "C:\\scripts", "always", "ready", "ready", 0, []),
   T("nightly-sync", "nightly-sync", "bat", "C:\\scripts\\sync.bat", "--full --compress", "C:\\scripts", "never", "none", "", 0, []),
 ];
 
@@ -261,7 +265,8 @@ const walk = (v: number, lo: number, hi: number, step: number) =>
 
 /* ---------------- Hook ---------------- */
 
-export function useSimulator() {
+/** 浏览器 / 模拟模式的模拟引擎（保留，供 npm run dev 预览） */
+function useSimulatorMock() {
   const [tasks, setTasks] = useState<SimTask[]>(seedTasks);
   const [logs, setLogs] = useState<Record<string, LogLine[]>>(() => {
     const init: Record<string, LogLine[]> = {};
@@ -328,6 +333,12 @@ export function useSimulator() {
   }, []);
 
   /* ---------- 启动 ---------- */
+  /*
+   * 注意：mock 的崩溃/退避是演示用简化模型。后端 supervisor.rs 额外有
+   * "always 策略下存活 < MIN_STABLE_LIFETIME(5s) 的 code-0 快速正常退出
+   *  按崩溃循环计入熔断退避" 的语义，浏览器原型不还原这条（无真实进程生命周期）。
+   * 桌面版（isTauri）走 useSimulatorLive，语义完全由 Rust 引擎权威决定。
+   */
   const startingRef = useRef(new Set<string>());
   const beginStart = useCallback((id: string) => {
     if (startingRef.current.has(id)) return;
@@ -417,9 +428,9 @@ export function useSimulator() {
     startingRef.current.delete(id);
     if (task.pid !== null) {
       if (task.kind === "exe" && task.gracefulTimeout > 0) {
-        pushLog(id, "SYS", `优雅停止窗口 ${task.gracefulTimeout}s：发送关闭信号 → 超时兜底`);
+        pushLog(id, "SYS", `优雅停止窗口 ${task.gracefulTimeout}s：等待自然退出 → 超时强杀进程树`);
       }
-      pushLog(id, "SYS", `taskkill /F /T /PID ${task.pid} · 整棵进程树已终结`);
+      pushLog(id, "SYS", `taskkill /T /F /PID ${task.pid} · 整棵进程树已终结`);
     } else if (!opts?.silentLog) {
       pushLog(id, "SYS", "任务已取消");
     }
@@ -624,11 +635,300 @@ export function useSimulator() {
     autoScroll, setAutoScroll,
     appStart: appStartRef.current,
     runningCount,
+    configPath: "data\\config.toml",
     startTask, stopTask, restartTask, startAll, stopAll,
     crashTask, resetBreaker, addTask, updateTask, deleteTask, clearLogs,
     faultInject, setFaultInject,
     notify: toast,
   };
+}
+
+/* ---------------- Tauri 实时数据管线（真实后端） ---------------- */
+
+declare global {
+  interface Window {
+    __TAURI_INTERNALS__?: unknown;
+  }
+}
+
+export const isTauri = typeof window !== "undefined" && !!(window as any).__TAURI_INTERNALS__;
+
+// 后端 snapshot DTO（serde camelCase）
+interface TaskDto {
+  name: string;
+  state: string;
+  pid: number | null;
+  restarts: number;
+  probeMs: number | null;
+  probeOk: boolean | null;
+  lastError: string | null;
+  exitCode: number | null;
+  kind: string;
+  path: string;
+  args: string[];
+  cwd: string;
+  strategy: string;
+  healthMode: string;
+  healthTarget: string;
+  gracefulTimeout: number;
+  deps: string[];
+  startedAtMs: number | null;
+  /** 退避到期时刻（绝对 unix 毫秒，与 Date.now() 同域） */
+  backoffUntilMs: number | null;
+}
+interface LogLineDto {
+  tMs: number;
+  level: string;
+  msg: string;
+}
+interface SnapshotDto {
+  tasks: TaskDto[];
+  runningCount: number;
+  cpu: number;
+  mem: number;
+  gpu: number;
+  gpuTemp: number | null;
+  vramUsed: number | null;
+  vramTotal: number | null;
+  cpuHist: number[];
+  gpuHist: number[];
+  stats: { spawned: number; restarts: number; lastError: string | null };
+  configPath: string;
+  faultInject: boolean;
+}
+
+/**
+ * 字段级等价：快照里未变化的任务复用旧对象引用，
+ * 让 TaskCard 的 React.memo 在 4Hz 推送下只重绘真正变化的卡片。
+ * crashTimes/backoffAttempt 是 mock 专用字段（live 恒为空/0），不参与比较。
+ */
+function sameTask(a: SimTask, b: SimTask): boolean {
+  return (
+    a.state === b.state && a.pid === b.pid && a.restarts === b.restarts &&
+    a.exitCode === b.exitCode && a.lastError === b.lastError && a.probeMs === b.probeMs &&
+    a.startedAt === b.startedAt && a.backoffUntil === b.backoffUntil &&
+    a.kind === b.kind && a.path === b.path && a.args === b.args && a.cwd === b.cwd &&
+    a.strategy === b.strategy && a.health === b.health &&
+    a.healthTarget === b.healthTarget && a.gracefulTimeout === b.gracefulTimeout &&
+    a.deps.length === b.deps.length && a.deps.every((x, i) => x === b.deps[i])
+  );
+}
+
+/** 后端 TaskDto → 前端 SimTask */
+function mapTask(d: TaskDto): SimTask {
+  return {
+    id: d.name,
+    name: d.name,
+    kind: d.kind as Kind,
+    path: d.path,
+    args: d.args.join(" "),
+    cwd: d.cwd,
+    strategy: d.strategy as Strategy,
+    health: d.healthMode as HealthMode,
+    healthTarget: d.healthTarget,
+    gracefulTimeout: d.gracefulTimeout,
+    deps: d.deps,
+    state: d.state as TaskState,
+    pid: d.pid,
+    startedAt: d.startedAtMs,
+    restarts: d.restarts,
+    exitCode: d.exitCode,
+    lastError: d.lastError,
+    probeMs: d.probeMs,
+    crashTimes: [],
+    backoffUntil: d.backoffUntilMs, // 后端已下发绝对时间戳，直接可比
+    backoffAttempt: 0,
+  };
+}
+
+/** 前端 TaskDraft → 后端 TaskConfig（snake_case JSON） */
+function draftToCfg(d: TaskDraft) {
+  const p = parseArgs(d.args);
+  return {
+    name: d.name,
+    kind: d.kind,
+    path: d.path,
+    args: p.args,
+    cwd: d.cwd,
+    strategy: d.strategy,
+    graceful_timeout: d.gracefulTimeout,
+    deps: d.deps,
+    health: { mode: d.health, target: d.healthTarget },
+    enabled: true,
+  };
+}
+
+/** Tauri 真实模式：invoke 命令 + listen 事件，驱动现有 UI */
+function useSimulatorLive() {
+  const [tasks, setTasks] = useState<SimTask[]>([]);
+  const [logs, setLogs] = useState<Record<string, LogLine[]>>({});
+  const [metrics, setMetrics] = useState<Metrics>({ cpu: 0, mem: 0, gpu: 0, vram: 0, gpuTemp: 0, cpuHist: [], gpuHist: [] });
+  const [now, setNow] = useState(() => Date.now());
+  const [selectedId, setSelectedId] = useState("");
+  const [autoScroll, setAutoScroll] = useState(true);
+  const [toasts, setToasts] = useState<Toast[]>([]);
+  const [stats, setStats] = useState({ spawned: 0, restarts: 0, lastError: null as string | null });
+  const [faultInject, setFaultInject] = useState(false);
+  const [runningCount, setRunningCount] = useState(0);
+  const [configPath, setConfigPath] = useState("");
+  const [appStart] = useState(() => Date.now());
+  const logIdRef = useRef(1);
+  const toastIdRef = useRef(1);
+  const tasksRef = useRef(tasks);
+  tasksRef.current = tasks;
+  /** 上一帧映射结果：内容相同的任务沿引用复用（memo 生效的前提） */
+  const prevMappedRef = useRef<SimTask[]>([]);
+
+  const applySnapshot = useCallback((s: SnapshotDto) => {
+    try {
+      const prev = prevMappedRef.current;
+      const next = s.tasks.map((d) => {
+        const nt = mapTask(d);
+        const old = prev.find((t) => t.id === nt.id);
+        return old && sameTask(old, nt) ? old : nt;
+      });
+      prevMappedRef.current = next;
+      setTasks(next);
+    } catch (e) {
+      console.error("TaskWarden 快照映射失败", e);
+    }
+    setMetrics({
+      cpu: s.cpu, mem: s.mem, gpu: s.gpu,
+      vram: s.vramUsed !== null ? s.vramUsed / 1024 : 0,
+      gpuTemp: s.gpuTemp ?? 0,
+      cpuHist: s.cpuHist, gpuHist: s.gpuHist,
+    });
+    setStats({ spawned: s.stats.spawned, restarts: s.stats.restarts, lastError: s.stats.lastError });
+    setRunningCount(s.runningCount);
+    setFaultInject(s.faultInject);
+    if (s.configPath) setConfigPath(s.configPath);
+    setSelectedId((prev) => prev || s.tasks[0]?.name || "");
+  }, []);
+
+  useEffect(() => {
+    let unSnap: (() => void) | undefined;
+    let unLog: (() => void) | undefined;
+    let unNotice: (() => void) | undefined;
+    (async () => {
+      // 关键：先注册事件监听（即使初始快照拉取失败，也能收到实时推送，避免界面冻结）
+      try {
+        unSnap = await listen<SnapshotDto>("snapshot", (e) => applySnapshot(e.payload));
+      } catch (e) {
+        console.error("TaskWarden 监听 snapshot 失败", e);
+      }
+      try {
+        unLog = await listen("log-event", (e) => {
+          const { task, line } = e.payload as { task: string; line: LogLineDto };
+          setLogs((p) => {
+            const list = p[task] ?? [];
+            const next = [...list, { id: logIdRef.current++, t: line.tMs, level: line.level as LogLevel, msg: line.msg }];
+            if (next.length > LOG_CAP) next.splice(0, next.length - LOG_CAP);
+            return { ...p, [task]: next };
+          });
+        });
+      } catch (e) {
+        console.error("TaskWarden 监听 log-event 失败", e);
+      }
+      try {
+        unNotice = await listen("notice", (e) => {
+          const { kind, text } = e.payload as { kind: Toast["kind"]; text: string };
+          const id = toastIdRef.current++;
+          setToasts((p) => [...p.slice(-3), { id, kind, text }]);
+          setTimeout(() => setToasts((p) => p.filter((t) => t.id !== id)), 4600);
+        });
+      } catch (e) {
+        console.error("TaskWarden 监听 notice 失败", e);
+      }
+      // 再拉一次初始快照（失败不影响已注册的监听）
+      try {
+        const snap = await invoke<SnapshotDto>("list_snapshot");
+        applySnapshot(snap);
+      } catch (e) {
+        console.error("TaskWarden 初始快照失败", e);
+      }
+    })();
+    return () => {
+      unSnap?.();
+      unLog?.();
+      unNotice?.();
+    };
+  }, [applySnapshot]);
+
+  useEffect(() => {
+    const iv = window.setInterval(() => setNow(Date.now()), 500);
+    return () => window.clearInterval(iv);
+  }, []);
+
+  // 选中任务变化时，拉取该任务的历史日志（后端 Ring Buffer）
+  useEffect(() => {
+    if (!selectedId) return;
+    invoke<LogLineDto[]>("get_logs", { id: selectedId })
+      .then((lines: LogLineDto[]) => {
+        setLogs((p) => ({
+          ...p,
+          [selectedId]: lines.map((l) => ({ id: logIdRef.current++, t: l.tMs, level: l.level as LogLevel, msg: l.msg })),
+        }));
+      })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId]);
+
+  const notify = useCallback((kind: Toast["kind"], text: string) => {
+    const id = toastIdRef.current++;
+    setToasts((p) => [...p.slice(-3), { id, kind, text }]);
+    setTimeout(() => setToasts((p) => p.filter((t) => t.id !== id)), 4600);
+  }, []);
+
+  const startTask = useCallback((id: string, _o?: unknown) => { invoke("start", { id }).catch((e) => notify("err", `启动失败：${e}`)); }, [notify]);
+  const stopTask = useCallback((id: string, _o?: unknown) => { invoke("stop", { id }).catch((e) => notify("err", `停止失败：${e}`)); }, [notify]);
+  const restartTask = useCallback((id: string) => { invoke("restart", { id }).catch((e) => notify("err", `重启失败：${e}`)); }, [notify]);
+  const startAll = useCallback(() => { invoke("start_all").catch((e) => notify("err", `启动全部失败：${e}`)); }, [notify]);
+  const stopAll = useCallback(() => { invoke("stop_all").catch((e) => notify("err", `停止全部失败：${e}`)); }, [notify]);
+  const crashTask = useCallback((id: string, _m?: boolean) => { invoke("crash", { id }).catch((e) => notify("err", `模拟崩溃失败：${e}`)); }, [notify]);
+  const resetBreaker = useCallback((id: string) => { invoke("reset_breaker", { id }).catch((e) => notify("err", `重置熔断失败：${e}`)); }, [notify]);
+  const addTask = useCallback((d: TaskDraft) => {
+    if (tasksRef.current.some((t) => t.name.trim() === d.name.trim())) {
+      notify("warn", `任务 "${d.name}" 已存在`);
+      return false;
+    }
+    invoke("add_task", { cfg: draftToCfg(d) })
+      .then(() => notify("ok", `任务 "${d.name}" 已添加`))
+      .catch((e) => notify("err", `添加任务失败：${e}`));
+    return true;
+  }, [notify]);
+  const updateTask = useCallback((_id: string, d: TaskDraft) => {
+    invoke("update_task", { cfg: draftToCfg(d) }).catch((e) => notify("err", `更新任务失败：${e}`));
+  }, [notify]);
+  const deleteTask = useCallback((id: string) => {
+    invoke("remove_task", { id })
+      .then(() => notify("ok", "任务已删除"))
+      .catch((e) => notify("err", `删除任务失败：${e}`));
+  }, [notify]);
+  const clearLogs = useCallback((id: string) => {
+    setLogs((p) => ({ ...p, [id]: [] }));
+    // 后端环缓冲同步清空：否则切换卡片再回来，get_logs 会把「已清空」的旧日志复活
+    invoke("clear_logs", { id }).catch((e) => notify("err", `清空失败：${e}`));
+  }, [notify]);
+  const setFault = useCallback((v: boolean) => { setFaultInject(v); invoke("set_fault_inject", { flag: v }).catch((e) => notify("err", `故障注入失败：${e}`)); }, [notify]);
+
+  const selectedTask = tasks.find((t) => t.id === selectedId) ?? null;
+
+  return {
+    tasks, logs, metrics, now, toasts, stats,
+    selectedId, selectedTask, setSelectedId,
+    autoScroll, setAutoScroll,
+    appStart, runningCount,
+    configPath: configPath || "data\\config.toml",
+    startTask, stopTask, restartTask, startAll, stopAll,
+    crashTask, resetBreaker, addTask, updateTask, deleteTask, clearLogs,
+    faultInject, setFaultInject: setFault,
+    notify,
+  };
+}
+
+/** 入口分流：Tauri 环境用真实后端（invoke+listen），否则用浏览器模拟 */
+export function useSimulator() {
+  return isTauri ? useSimulatorLive() : useSimulatorMock();
 }
 
 export type Simulator = ReturnType<typeof useSimulator>;

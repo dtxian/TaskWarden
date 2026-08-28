@@ -37,7 +37,7 @@ export function IntroBand() {
           <Reveal>
             <div className="inline-flex items-center gap-2 rounded-[6px] border border-[#FF7A29]/30 bg-[#FF7A29]/[0.07] px-3 py-1.5 font-mono text-[10.5px] font-semibold tracking-[0.18em] text-[#FF9557]">
               <span className="h-1.5 w-1.5 rounded-full bg-[#FF7A29] pulse-dot" />
-              RUST · 原生分层架构 · EGUI + EFRAME · WINDOWS 专用
+              RUST 引擎 · TAURI 2 + REACT · WINDOWS 专用
             </div>
           </Reveal>
           <h1 className="mt-6 font-body text-[38px] font-black leading-[1.08] tracking-tight text-fog-100 md:text-[58px]">
@@ -51,7 +51,7 @@ export function IntroBand() {
             一条极简工作流：<strong className="text-fog-100">点选添加程序 → 填参数 → 静默启动 → 监控状态与日志 → 停止</strong>。
             不记命令、无黑框、统一管理常驻程序 —— 全部配置收敛进一份{" "}
             <code className="rounded bg-ink-700 px-1.5 py-0.5 font-mono text-[12.5px] text-[#FFC86B]">config.toml</code>，
-            冷启动 ≤200ms，常驻内存 18–30MB。
+            冷启动窗口就绪 ~50ms，Rust 引擎进程常驻约 53MB（WebView2 渲染进程组另计）。
           </p>
           <Reveal delay={200} className="mt-8 flex flex-wrap items-center gap-3">
             <a
@@ -125,7 +125,7 @@ export function ArchitectureSection() {
       <SectionHead
         no="01 / 分层架构"
         title="四层原生架构 · 命令向下，事件向上"
-        desc="GUI 只发命令、不碰进程句柄；运行时只暴露 Child 与进程树抽象；基础设施无业务依赖可独立单测。层间以 std mpsc 通道解耦 —— 零异步运行时，零 WebView。"
+        desc="GUI 只发命令、不碰进程句柄；运行时只暴露 Child 与进程树抽象；基础设施无业务依赖可独立单测。层间以 std mpsc 通道解耦 —— 后端零异步运行时（std 线程 + mpsc）· 渲染走系统 WebView2。"
       />
 
       <div className="grid gap-10 lg:grid-cols-[390px_1fr] lg:gap-12">

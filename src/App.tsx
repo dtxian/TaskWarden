@@ -2,7 +2,7 @@ import { ArchitectureSection, IntroBand } from "./components/sections/DesignSect
 import { CodeSection, PerfSection, TraySection } from "./components/sections/CodeSections";
 import SimulatorWindow from "./components/sim/SimulatorWindow";
 import { IconShield } from "./components/ui";
-import { useSimulator } from "./sim/useSimulator";
+import { isTauri, useSimulator } from "./sim/useSimulator";
 
 /* ------------------------------------------------------------------ */
 /* TaskWarden · 轻量级后台任务守护监督器 —— 交互原型 + 工程设计文档         */
@@ -45,7 +45,7 @@ function Nav() {
           className="ml-auto flex items-center gap-1.5 rounded-[7px] border border-[#FF7A29]/50 bg-[#FF7A29]/10 px-3 py-1.5 font-mono text-[10.5px] font-bold text-[#FF9557] transition-all hover:bg-[#FF7A29]/20 md:ml-3"
         >
           <span className="h-1.5 w-1.5 rounded-full bg-[#3ECF6E] pulse-dot" />
-          v0.1.0 · egui/eframe
+          v0.1.0 · Tauri 2 + React
         </a>
       </div>
     </header>
@@ -89,7 +89,7 @@ function Footer() {
       </div>
       <div className="border-t border-ink-800">
         <div className="mx-auto flex max-w-[1200px] flex-wrap items-center gap-x-4 gap-y-2 px-5 py-4 font-mono text-[10.5px] text-fog-600">
-          <span>Rust · egui · eframe · tray-icon · windows-rs · nvml-wrapper · serde/toml</span>
+          <span>Rust · Tauri 2 · WebView2 · React · windows-rs · nvml-wrapper · serde/toml</span>
           <span className="ml-auto">需求与设计文档 v1.0 · Windows 专用</span>
         </div>
       </div>
@@ -97,7 +97,7 @@ function Footer() {
   );
 }
 
-export default function App() {
+function LandingApp() {
   const sim = useSimulator();
 
   return (
@@ -123,7 +123,7 @@ export default function App() {
                 <span className="h-px w-24 bg-gradient-to-r from-[#3ECF6E]/60 to-transparent" />
               </div>
               <h2 className="mt-2 font-body text-[24px] font-black text-fog-100 md:text-[30px]">
-                egui 主窗口 · 高保真交互原型
+                主窗口 · 高保真交互原型
               </h2>
             </div>
             <p className="max-w-[440px] text-[12px] leading-relaxed text-fog-500">
@@ -153,4 +153,22 @@ export default function App() {
       <Footer />
     </div>
   );
+}
+
+/* ------------------------------------------------------------------ */
+/* 入口分流：Tauri 桌面版只渲染「真正的软件界面」，浏览器渲染完整介绍页      */
+/* ------------------------------------------------------------------ */
+
+/** Tauri 桌面版：纯软件界面（无介绍/架构/代码文档区） */
+function SoftwareApp() {
+  const sim = useSimulator();
+  return (
+    <div className="egui relative h-screen overflow-hidden" style={{ background: "var(--eg-bg)" }}>
+      <SimulatorWindow sim={sim} appMode />
+    </div>
+  );
+}
+
+export default function App() {
+  return isTauri ? <SoftwareApp /> : <LandingApp />;
 }

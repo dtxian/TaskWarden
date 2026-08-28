@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import type { Kind, SimTask, TaskDraft } from "../../sim/useSimulator";
-import { buildCommand, kindFromExt, parseArgs, pathExists } from "../../sim/useSimulator";
+import { buildCommand, isTauri, kindFromExt, parseArgs, pathExists } from "../../sim/useSimulator";
+import { open } from "@tauri-apps/plugin-dialog";
 import { IconCheck, IconCopy, IconFile, IconFolder, IconX } from "../ui";
 
 /* ------------------------------------------------------------------ */
@@ -37,7 +38,7 @@ export default function TaskModal({ initial, allTasks, onClose, onSubmit }: Prop
 
   const copyPath = async () => {
     try {
-      await navigator.clipboard.writeText("%APPDATA%\\TaskWarden\\config.toml");
+      await navigator.clipboard.writeText("<exe 目录>\\data\\config.toml");
       setCopiedPath(true);
       window.setTimeout(() => setCopiedPath(false), 1500);
     } catch { /* 剪贴板不可用时静默 */ }
@@ -70,9 +71,11 @@ export default function TaskModal({ initial, allTasks, onClose, onSubmit }: Prop
     const e: Record<string, string> = {};
     if (!d.name.trim()) e.name = "任务名不能为空";
     if (!d.path.trim()) e.path = "路径不能为空";
-    else if (!/\.(exe|bat|cmd|ps1)$/i.test(d.path)) e.path = "仅支持 .exe / .bat / .cmd / .ps1";
-    else if (!pathExists(d.path, allTasks.map((t) => t.path)))
-      e.path = "路径不存在（TaskWarden 启动前校验失败）—— 请用「浏览…」选择文件，或核对路径";
+    else if (!isTauri) {
+      if (!/\.(exe|bat|cmd|ps1)$/i.test(d.path)) e.path = "仅支持 .exe / .bat / .cmd / .ps1";
+      else if (!pathExists(d.path, allTasks.map((t) => t.path)))
+        e.path = "路径不存在（TaskWarden 启动前校验失败）—— 请用「浏览…」选择文件，或核对路径";
+    }
     if (parsed.error) e.args = parsed.error;
     if (d.health === "tcp" && !/^[\w.:-]+:\d+$/.test(d.healthTarget)) e.health = "TCP 目标格式：host:port";
     if (d.health === "http" && !/^https?:\/\/.+/.test(d.healthTarget)) e.health = "HTTP 目标需以 http(s):// 开头";
@@ -125,7 +128,16 @@ export default function TaskModal({ initial, allTasks, onClose, onSubmit }: Prop
             <div className="flex gap-2">
               <input className={inputCls} value={d.path} onChange={(e) => setPath(e.target.value)} placeholder="C:\tools\app.exe" />
               <button
-                onClick={() => fileRef.current?.click()}
+                onClick={async () => {
+                  if (isTauri) {
+                    // 真实文件选择对话框
+                    const sel = await open({ multiple: false, filters: [{ name: "程序", extensions: ["exe", "bat", "cmd", "ps1"] }] });
+                    if (typeof sel === "string") setPath(sel);
+                  } else {
+                    // 浏览器（Pages/演示）：模拟文件选择
+                    fileRef.current?.click();
+                  }
+                }}
                 className="flex shrink-0 items-center gap-1.5 rounded-[6px] border border-[var(--eg-line)] bg-[var(--eg-inset)] px-3 text-[11.5px] font-medium text-[var(--eg-text)] transition-colors hover:border-[#FF7A29] hover:text-[#FF9557]"
               >
                 <IconFolder size={13} /> 浏览…
@@ -305,7 +317,7 @@ export default function TaskModal({ initial, allTasks, onClose, onSubmit }: Prop
           <div className="flex items-center gap-2.5 rounded-[8px] border border-[var(--eg-line-soft)] bg-[var(--eg-inset)] px-3 py-2">
             <IconFile size={13} className="shrink-0 text-[#FF9557]" />
             <div className="min-w-0 flex-1">
-              <div className="truncate font-mono text-[11px] font-semibold text-[var(--eg-text)]">%APPDATA%\TaskWarden\config.toml</div>
+              <div className="truncate font-mono text-[11px] font-semibold text-[var(--eg-text)]">{"<exe 目录>\\data\\config.toml"}</div>
               <div className="text-[9.5px] text-[var(--eg-muted)]">配置文件位置 · 原子写入（临时文件 + rename）· 可直接复制备份</div>
             </div>
             <button
@@ -337,10 +349,11 @@ export default function TaskModal({ initial, allTasks, onClose, onSubmit }: Prop
 
 /* ---------------- 删除二次确认 ---------------- */
 
-export function ConfirmDialog({ title, desc, confirmText, onCancel, onConfirm }: {
+export function ConfirmDialog({ title, desc, confirmText, cancelText = "取消", onCancel, onConfirm }: {
   title: string;
   desc: string;
   confirmText: string;
+  cancelText?: string;
   onCancel: () => void;
   onConfirm: () => void;
 }) {
@@ -351,7 +364,7 @@ export function ConfirmDialog({ title, desc, confirmText, onCancel, onConfirm }:
         <p className="mt-2 text-[12px] leading-relaxed text-[var(--eg-muted)]">{desc}</p>
         <div className="mt-4 flex justify-end gap-2">
           <button onClick={onCancel} className="rounded-[6px] border border-[var(--eg-line)] px-4 py-1.5 text-[12px] text-[var(--eg-muted)] transition-colors hover:text-[var(--eg-text)]">
-            取消
+            {cancelText}
           </button>
           <button onClick={onConfirm} className="rounded-[6px] bg-[#F0564A] px-4 py-1.5 text-[12px] font-bold text-white transition-all hover:bg-[#FF7B70] active:scale-[0.97]">
             {confirmText}

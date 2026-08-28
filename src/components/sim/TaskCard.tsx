@@ -1,3 +1,4 @@
+import { memo } from "react";
 import type { SimTask, TaskState } from "../../sim/useSimulator";
 import { buildCommand, fmtDur } from "../../sim/useSimulator";
 import { IconBolt, IconEdit, IconFuse, IconLink, IconPlay, IconRestart, IconStop, IconX } from "../ui";
@@ -38,7 +39,7 @@ interface Props {
 const btn =
   "inline-flex items-center gap-1 rounded-[5px] border px-2 py-[3px] text-[11px] font-medium transition-all duration-150 disabled:opacity-35 disabled:cursor-not-allowed active:scale-[0.96]";
 
-export default function TaskCard(p: Props) {
+function TaskCard(p: Props) {
   const { task: t, now } = p;
   const meta = STATE_META[t.state];
   const kind = KIND_META[t.kind];
@@ -148,9 +149,6 @@ export default function TaskCard(p: Props) {
               <IconFuse size={11} /> 重置熔断
             </button>
           )}
-          <button onClick={p.onCrash} disabled={t.state !== "running"} title="模拟进程意外退出，演示守护策略" className={`${btn} border-[var(--eg-line)] text-[var(--eg-muted)] hover:text-[#FFC86B] hover:border-[rgba(255,200,107,0.5)]`}>
-            <IconBolt size={11} /> 模拟异常
-          </button>
           <button onClick={p.onEdit} title="编辑任务" className={`${btn} border-[var(--eg-line)] text-[var(--eg-muted)] hover:text-[var(--eg-text)]`}>
             <IconEdit size={11} />
           </button>
@@ -162,3 +160,18 @@ export default function TaskCard(p: Props) {
     </div>
   );
 }
+
+/**
+ * 4Hz 快照下避免整网格重绘：
+ * - task：引用相等即全字段相等（映射层 sameTask 保证未变化任务复用旧引用）
+ * - now：按秒量化（uptime/退避倒计时只需秒级刷新 → 卡片实际 1Hz 重渲染）
+ * - depNames：父层每帧重建数组，按内容比较
+ * - 函数 props：内联闭包但只捕获稳定 sim 方法与常量 t.id，忽略其引用变化
+ */
+export default memo(TaskCard, (a, b) =>
+  a.task === b.task &&
+  Math.floor(a.now / 1000) === Math.floor(b.now / 1000) &&
+  a.selected === b.selected &&
+  (a.depNames === b.depNames ||
+    (a.depNames.length === b.depNames.length && a.depNames.every((x, i) => x === b.depNames[i]))),
+);

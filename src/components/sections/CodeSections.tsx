@@ -31,7 +31,7 @@ export function CodeSection() {
       <SectionHead
         no="02 / 关键实现"
         title="把 Windows 的脏活，封装进干净的 Rust 抽象"
-        desc="以下代码片段对应需求文档中的每一项硬指标：静默派生、进程树终结、滑动窗口熔断、DAG 调度、环状日志与单实例托盘入口。全部基于 std 与 windows-rs，无异步运行时。"
+        desc="以下代码片段对应需求文档中的每一项硬指标：静默派生、进程树终结、滑动窗口熔断、DAG 调度、环状日志与单实例托盘入口。核心引擎基于 std 与 windows-rs，无异步运行时；界面层为 Tauri IPC + React。"
       />
 
       <div className="grid gap-6 lg:grid-cols-[280px_1fr]">

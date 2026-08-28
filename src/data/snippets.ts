@@ -20,7 +20,7 @@ export const SNIPPETS: Snippet[] = [
     lang: "toml",
     title: "任务配置持久化",
     note: "全部任务收敛到一份 config.toml：per-task 重启策略、熔断窗口、健康探针与依赖声明。写入采用「临时文件 + 原子 rename」，杜绝半截配置。",
-    code: `# %APPDATA%\\TaskWarden\\config.toml
+    code: `# <exe目录>\\data\\config.toml（便携；首启从 %APPDATA% 迁移）
 [settings]
 log_dir            = "logs"        # 每任务一个日志文件
 breaker_window_sec = 60            # 熔断滑动窗口
@@ -162,43 +162,60 @@ impl ProcessTree {
     layer: "核心调度层",
     lang: "rust",
     title: "滑动窗口熔断 + 指数退避",
-    note: "窗口时长与失败上限均可在 config.toml 配置。窗口内连续失败超限 → 熔断挂起；未超限则按 2^n 秒指数退避重试，成功运行后计数归零。",
+    note: "窗口时长与失败上限均可在 config.toml 配置。窗口内失败次数超限 → 熔断挂起；未超限则按 2^n 秒指数退避重试（n 截至 6，封顶 64s），进程稳定后计数归零。",
     code: `use std::collections::VecDeque;
 use std::time::{Duration, Instant};
 
-pub enum Verdict {
-    Backoff(Duration),   // 退避后重试
-    Fused,               // 熔断：暂停自动重启
+pub enum Decision {
+    Ok,                                   // 正常计数，未触发
+    Trip,                                 // 熔断：暂停自动重启
+    Backoff(Duration),                    // 退避 delay 秒后重试
 }
 
 pub struct Breaker {
-    window: Duration,            // 滑动窗口（默认 60s）
-    max_fails: usize,            // 窗口内失败上限（默认 3）
-    events: VecDeque<Instant>,   // 失败时间戳
-    attempt: u32,
+    window: Duration,                     // 滑动窗口（默认 60s）
+    max_fails: u32,                       // 窗口内失败上限（默认 3）
+    failures: VecDeque<Instant>,          // 失败时间戳
+    backoff_attempt: u32,
+    backoff_until: Option<Instant>,
+    fused: bool,
 }
 
 impl Breaker {
-    pub fn record_failure(&mut self) -> Verdict {
-        let now = Instant::now();
-        // 滑出窗口外的旧失败不再计数
-        self.events.retain(|t| now.duration_since(*t) < self.window);
-        self.events.push_back(now);
-
-        if self.events.len() >= self.max_fails {
-            self.events.clear();
-            Verdict::Fused
+    pub fn record_failure(&mut self, now: Instant) -> Decision {
+        self.trim(now);                       // 滑出窗口外的旧失败不再计数
+        self.failures.push_back(now);
+        self.backoff_attempt += 1;
+        if self.failures.len() as u32 >= self.max_fails {
+            self.failures.clear();
+            Decision::Trip                    // 熔断：暂停自动重启，等待手动干预
         } else {
-            // 指数退避：2s → 4s → 8s … 封顶 60s
-            let secs = (1u64 << self.attempt.min(5)).min(60);
-            self.attempt += 1;
-            Verdict::Backoff(Duration::from_secs(secs))
+            Decision::Backoff(self.backoff_delay(self.backoff_attempt))
         }
     }
 
-    /// 进程稳定运行后复位退避计数
-    pub fn on_stable(&mut self) {
-        self.attempt = 0;
+    /// 指数退避：2^n 秒，封顶 64s
+    pub fn backoff_delay(&self, attempt: u32) -> Duration {
+        let exp = attempt.min(6) as u32;      // 2^6 = 64s 封顶
+        Duration::from_secs(1 << exp)
+    }
+
+    /// 手动重置（用户干预后）
+    pub fn reset(&mut self) {
+        self.failures.clear();
+        self.backoff_attempt = 0;
+        self.backoff_until = None;
+        self.fused = false;
+    }
+
+    fn trim(&mut self, now: Instant) {
+        while let Some(&f) = self.failures.front() {
+            if now.duration_since(f) > self.window {
+                self.failures.pop_front();
+            } else {
+                break;
+            }
+        }
     }
 }`,
   },
@@ -208,52 +225,48 @@ impl Breaker {
     layer: "核心调度层",
     lang: "rust",
     title: "DAG 拓扑启动 / 级联停止",
-    note: "Kahn 算法把任务切成若干「层」：同层任务并发派生，层与层之间串行等待；检测到环直接报错拒绝启动。停止按反拓扑序执行，天然支持级联。",
-    code: `use std::collections::{HashMap, VecDeque};
+    note: "Kahn 算法把任务切成若干「层」：同层任务并发派生，层与层之间串行等待；存在环时把剩余任务并入最后一层继续执行，不报错。停止按反拓扑序执行，天然支持级联。",
+    code: `use std::collections::{HashMap, HashSet};
 
-use crate::core::Task;
+use crate::infra::config::TaskConfig;
 
-/// Kahn 拓扑分层：第 0 层无依赖可并发，层序即启动序
-pub fn topo_levels(tasks: &[Task]) -> Result<Vec<Vec<String>>, String> {
-    let mut indeg: HashMap<&str, usize> = HashMap::new();
-    let mut dependents: HashMap<&str, Vec<&str>> = HashMap::new();
+/// Kahn 拓扑分层：第 0 层无依赖可并发，层序即启动序。
+/// 存在环或未知依赖导致未排入的任务，追加为最后一层继续执行（不报错）。
+pub fn topo_levels(tasks: &[TaskConfig]) -> Vec<Vec<String>> {
+    let deps = direct_deps(tasks);
+    let mut indeg: HashMap<String, usize> = deps.iter().map(|(k, v)| (k.clone(), v.len())).collect();
+    let depend = dependents(tasks);
 
-    for t in tasks {
-        indeg.entry(t.name.as_str()).or_insert(0);
-        for dep in &t.deps {
-            *indeg.entry(t.name.as_str()).or_insert(0) += 1;
-            dependents.entry(dep.as_str()).or_default().push(&t.name);
-        }
-    }
-
-    let mut queue: VecDeque<&str> = indeg
+    let mut levels: Vec<Vec<String>> = Vec::new();
+    let mut frontier: Vec<String> = indeg
         .iter()
         .filter(|(_, &d)| d == 0)
-        .map(|(&n, _)| n)
+        .map(|(k, _)| k.clone())
         .collect();
-
-    let mut levels = Vec::new();
-    while !queue.is_empty() {
-        let level: Vec<String> = queue.iter().map(|s| s.to_string()).collect();
-        let mut next = VecDeque::new();
-        for n in &queue {
-            if let Some(children) = dependents.get(*n) {
+    while !frontier.is_empty() {
+        levels.push(frontier.clone());
+        let mut next: Vec<String> = Vec::new();
+        for node in &frontier {
+            if let Some(children) = depend.get(node) {
                 for c in children {
-                    let d = indeg.get_mut(*c).unwrap();
-                    *d -= 1;
-                    if *d == 0 { next.push_back(c); }
+                    if let Some(d) = indeg.get_mut(c) {
+                        *d -= 1;
+                        if *d == 0 {
+                            next.push(c.clone());
+                        }
+                    }
                 }
             }
         }
-        levels.push(level);
-        queue = next;
+        frontier = next;
     }
-
-    let placed: usize = levels.iter().map(|l| l.len()).sum();
-    if placed != tasks.len() {
-        return Err("依赖存在环，拒绝启动".into());
+    // 未排入的任务（成环 / 未知依赖）并入最后一层，继续执行而非报错
+    let scheduled: HashSet<String> = levels.iter().flatten().cloned().collect();
+    let leftovers: Vec<String> = indeg.keys().filter(|k| !scheduled.contains(*k)).cloned().collect();
+    if !leftovers.is_empty() {
+        levels.push(leftovers);
     }
-    Ok(levels)   // supervisor 逐层 spawn，层内 std::thread 并发
+    levels   // supervisor 逐层 spawn，层内 std::thread 并发
 }`,
   },
   {
@@ -302,110 +315,124 @@ pub fn probe(mode: &HealthMode, target: &str, timeout: Duration) -> Health {
     layer: "基础设施层",
     lang: "rust",
     title: "Ring Buffer 实时日志",
-    note: "每任务一个定容环形缓冲（默认 200 行）：GUI 回看永远 O(1) 内存；同一份数据追加写入 logs/<任务名>.log 完成持久化。",
-    code: `use std::fs::OpenOptions;
-use std::io::Write;
+    note: "每任务一个定容环形缓冲（默认 200 行）：供日志面板/文件双写；同一份数据由 BufWriter 以 ≤500ms 节流追加写入 <exe目录>\\data\\logs\\<任务名>.log，内存恒定不暴涨。",
+    code: `use std::collections::VecDeque;
+use std::fs::OpenOptions;
+use std::io::{BufWriter, Write};
+
+pub const LOG_CAP: usize = 200;            // Ring Buffer 默认 200 行
+const FLUSH_INTERVAL_MS: u64 = 500;        // INFO 行 ≤500ms 落一次盘
 
 #[derive(Clone)]
 pub struct LogLine {
-    pub ts: u64,          // unix millis
-    pub level: u8,        // 0=INFO 1=WARN 2=ERR 3=SYS
+    pub t_ms: u64,          // unix 毫秒
+    pub level: &'static str,// INFO / WARN / ERR / SYS
     pub msg: String,
 }
 
-/// 定容环形缓冲：写满后覆盖最旧行，内存恒定
-pub struct RingLog {
-    buf: Vec<Option<LogLine>>,
-    head: usize,          // 下一个写入槽位
-    len: usize,
-    file: std::fs::File,  // logs/<任务名>.log 追加句柄
+/// 定容环形缓冲：写满后覆盖最旧行，内存恒定；同一份数据写入日志文件
+pub struct LogBuf {
+    lines: VecDeque<LogLine>,
+    cap: usize,
+    file: Option<BufWriter<std::fs::File>>, // <data>/logs/<任务名>.log 追加句柄
+    last_flush_ms: u64,
 }
 
-impl RingLog {
-    pub fn new(cap: usize, log_path: &str) -> std::io::Result<Self> {
-        let file = OpenOptions::new().create(true).append(true)
-            .open(log_path)?;
-        Ok(Self { buf: (0..cap).map(|_| None).collect(),
-                  head: 0, len: 0, file })
+impl LogBuf {
+    pub fn push(&mut self, t_ms: u64, level: &'static str, msg: String) {
+        let line = LogLine { t_ms, level, msg };
+        if let Some(w) = self.file.as_mut() {
+            let _ = writeln!(w, "[{}] {:<5} {}", format_time(t_ms), level, line.msg);
+            // 关键行或超出节流窗口才落盘；普通 INFO 攒在 8KB 缓冲里
+            if level != "INFO" || t_ms.saturating_sub(self.last_flush_ms) >= FLUSH_INTERVAL_MS {
+                let _ = w.flush();
+                self.last_flush_ms = t_ms;
+            }
+        }
+        if self.lines.len() == self.cap {
+            self.lines.pop_front();           // 写满覆盖最旧，内存恒定
+            if let Some(w) = self.file.as_mut() { let _ = w.flush(); }
+        }
+        self.lines.push_back(line);
     }
 
-    pub fn push(&mut self, line: LogLine) {
-        // ① 落盘持久化
-        let _ = writeln!(self.file, "[{}] {}", line.ts, line.msg);
-        // ② 入环（满则覆盖最旧）
-        self.buf[self.head] = Some(line);
-        self.head = (self.head + 1) % self.buf.len();
-        self.len = self.len.min(self.buf.len() - 1) + 1;
-    }
-
-    /// 按时间序迭代，供 egui 面板绘制
+    /// 按时间序迭代，供日志面板/文件双写
     pub fn iter(&self) -> impl Iterator<Item = &LogLine> {
-        let cap = self.buf.len();
-        let start = (self.head + cap - self.len) % cap;
-        (0..self.len).filter_map(move |i| {
-            self.buf[(start + i) % cap].as_ref()
-        })
+        self.lines.iter()
     }
 }`,
   },
   {
     id: "main",
-    file: "main.rs + tray.rs",
+    file: "lib.rs + backend.rs",
     layer: "入口 / 托盘",
     lang: "rust",
-    title: "单实例入口 + 托盘生命周期",
-    note: "CreateMutexW 全局互斥体防多开；关闭按钮仅隐藏视口，tray-icon 接管左键恢复与右键菜单，退出时先级联终止全部子进程再落盘配置。",
-    code: `mod core; mod gui; mod infra; mod runtime; mod tray;
+    title: "Tauri 装配入口 + 托盘",
+    note: "Tauri 2 单实例插件拦截二次启动并唤起已有窗口；托盘 TrayIconBuilder 内嵌 tray-icon.png，菜单为「显示主窗口 / 退出程序」，退出先级联终结全部子进程再落盘配置。",
+    code: `/* ============ src-tauri/src/lib.rs —— Tauri 装配入口（节选） ============ */
+mod backend; mod core; mod infra; mod runtime;
 
-use eframe::egui;
+use infra::config::Config;
+use tauri::Manager;
 
-fn main() -> eframe::Result<()> {
-    // ── 单实例保护：CreateMutexW("Global\\TaskWarden") ──
-    let _guard = infra::single_instance::acquire()
-        .expect("TaskWarden 已在运行，请勿多开");
-
-    let supervisor = core::supervisor::Supervisor::from_config(
-        &infra::config::load()?,
-    );
-
-    let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default()
-            .with_inner_size([1280.0, 820.0])
-            .with_min_inner_size([960.0, 640.0])
-            .with_title("TaskWarden — 任务守护监督器"),
-        ..Default::default()
-    };
-
-    eframe::run_native("taskwarden", options, Box::new(move |cc| {
-        // 关闭请求 → 隐藏窗口 + 托盘常驻（而非退出）
-        cc.egui_ctx.options_mut(|o| {
-            o.viewport.close_button = false;
-        });
-        let app = gui::app::TaskWardenApp::new(cc, supervisor);
-        tray::install(&cc.egui_ctx, app.handle());
-        Ok(Box::new(app))
-    }))
+pub fn run() {
+    // 诊断日志：stdout（开发）+ <exe 目录>\\data\\logs\\app.log（便携持久）
+    let app_log = tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Folder {
+        path: Config::data_dir().join("logs"),
+        file_name: Some("app".into()),
+    });
+    tauri::Builder::default()
+        .plugin(
+            tauri_plugin_log::Builder::default()
+                .level(log::LevelFilter::Info)
+                .targets([
+                    tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Stdout),
+                    app_log,
+                ])
+                .build(),
+        )
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            // 二次启动：激活已有主窗口
+            if let Some(w) = app.get_webview_window("main") {
+                let _ = w.show();
+                let _ = w.set_focus();
+            }
+        }))
+        .setup(|app| { backend::init(app.handle())?; Ok(()) })
+        .invoke_handler(tauri::generate_handler![
+            backend::list_snapshot, backend::start, backend::stop, backend::restart,
+            backend::start_all, backend::stop_all, backend::crash, backend::reset_breaker,
+            backend::add_task, backend::update_task, backend::remove_task,
+            backend::set_fault_inject, backend::shutdown, backend::get_logs, backend::clear_logs,
+        ])
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
 }
 
-/* tray.rs —— 左键恢复 / 右键菜单 / 气泡通知 */
-pub fn install(ctx: &egui::Context, app: eframe::AppHandle) {
-    let icon = include_bytes!("../assets/taskwarden.ico");
-    let tray = tray_icon::TrayIconBuilder::new()
-        .with_icon(load_icon(icon))
-        .with_tooltip("TaskWarden · 3 个任务运行中")
-        .with_menu(&Menu::with_items(&[
-            &MenuItem::new("显示主窗口", true, None),
-            &PredefinedMenuItem::separator(),
-            &MenuItem::new("退出程序", true, None),   // Job 级联回收 + 落盘
-        ]))
-        .build().unwrap();
+/* ============ src-tauri/src/backend.rs —— 托盘构建（节选） ============ */
+use tauri::menu::{MenuBuilder, MenuItemBuilder};
+use tauri::tray::TrayIconBuilder;
 
-    tray.on_left_click   = move |_| app.emit(UserEvent::ToggleWindow);
-    tray.on_menu_clicked = move |id| match id.as_str() {
-        "show" => app.emit(UserEvent::Show),
-        "quit" => app.emit(UserEvent::ShutdownAll),  // kill_tree 全部子进程
-        _ => {}
-    };
+fn build_tray(app: &AppHandle) -> tauri::Result<()> {
+    let show = MenuItemBuilder::with_id("show", "显示主窗口").build(app)?;
+    let quit = MenuItemBuilder::with_id("quit", "退出程序").build(app)?;
+    let menu = MenuBuilder::new(app).items(&[&show, &quit]).build()?;
+    // 托盘专用图标（编译期内嵌）：无底板、图形撑满画布，16~24px 依然清晰
+    let tray_icon = tauri::image::Image::from_bytes(include_bytes!("../icons/tray-icon.png"))
+        .unwrap_or_else(|_| app.default_window_icon().cloned().expect("内嵌了默认窗口图标"));
+    TrayIconBuilder::new()
+        .icon(tray_icon)
+        .icon_as_template(false)
+        .menu(&menu)
+        .tooltip("TaskWarden · 轻量级后台任务守护监督器")
+        .on_menu_event(|app, ev| match ev.id().as_ref() {
+            "show" => { /* show + set_focus 主窗口 */ }
+            "quit" => app.exit(0),
+            _ => {}
+        })
+        .build(app)?;
+    Ok(())
 }`,
   },
 ];

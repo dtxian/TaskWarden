@@ -1,16 +1,18 @@
 import { useMemo, useState } from "react";
 import type { SimTask, Simulator } from "../../sim/useSimulator";
-import { fmtDur } from "../../sim/useSimulator";
+import { fmtDur, isTauri } from "../../sim/useSimulator";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { invoke } from "@tauri-apps/api/core";
 import {
   IconCpu, IconFile, IconGpu, IconMoon, IconPlay, IconPlus, IconRam, IconRestore,
-  IconShield, IconStop, IconSun, IconTemp, IconTrayMenu, IconWindowOff, IconX, IconBolt,
+  IconShield, IconStop, IconSun, IconTemp, IconTrayMenu, IconWindowOff, IconX,
 } from "../ui";
 import LogPanel from "./LogPanel";
 import TaskCard from "./TaskCard";
 import TaskModal, { ConfirmDialog } from "./TaskModal";
 
 /* ------------------------------------------------------------------ */
-/* egui 主窗口原型：状态栏 + 任务网格 + 日志面板 + 全局栏 + 托盘生命周期    */
+/* 主窗口原型：状态栏 + 任务网格 + 日志面板 + 全局栏 + 托盘生命周期        */
 /* ------------------------------------------------------------------ */
 
 type View = "window" | "tray" | "exited";
@@ -18,13 +20,23 @@ type Modal = { mode: "add" } | { mode: "edit"; task: SimTask } | null;
 
 const ORDER: Record<string, number> = { running: 0, starting: 1, backoff: 2, fused: 3, stopped: 4 };
 
-export default function SimulatorWindow({ sim }: { sim: Simulator }) {
+/** 真实窗口控制（仅 Tauri 桌面版） */
+function winControl(action: "minimize" | "toggleMaximize" | "hide") {
+  if (!isTauri) return;
+  const win = getCurrentWindow();
+  if (action === "minimize") win.minimize();
+  else if (action === "toggleMaximize") win.toggleMaximize();
+  else win.hide();
+}
+
+export default function SimulatorWindow({ sim, appMode }: { sim: Simulator; appMode?: boolean }) {
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [view, setView] = useState<View>("window");
   const [modal, setModal] = useState<Modal>(null);
   const [confirmDel, setConfirmDel] = useState<SimTask | null>(null);
   const [trayMenu, setTrayMenu] = useState(false);
   const [nudge, setNudge] = useState(0); // 单实例拦截闪光
+  const [closePrompt, setClosePrompt] = useState(false); // 关闭询问弹窗
 
   const sorted = useMemo(
     () => [...sim.tasks].sort((a, b) => ORDER[a.state] - ORDER[b.state] || a.name.localeCompare(b.name)),
@@ -50,48 +62,48 @@ export default function SimulatorWindow({ sim }: { sim: Simulator }) {
       {view === "window" ? (
         /* ============ 主窗口 ============ */
         <div
-          className={`egui ${theme === "light" ? "eg-light" : ""} relative overflow-hidden rounded-xl border border-[var(--eg-line)] bg-[var(--eg-bg)] shadow-[0_40px_120px_-30px_rgba(0,0,0,0.85)]${nudge ? " instance-flash" : ""}`}
+          className={`egui ${theme === "light" ? "eg-light" : ""} relative overflow-hidden bg-[var(--eg-bg)]${appMode ? " flex h-screen flex-col" : " rounded-xl border border-[var(--eg-line)] shadow-[0_40px_120px_-30px_rgba(0,0,0,0.85)]"}${nudge ? " instance-flash" : ""}`}
           onAnimationEnd={(e) => {
             if (e.animationName === "instance-flash") setNudge(0);
           }}
         >
-          {/* 标题栏 */}
-          <div className="flex items-center gap-2 border-b border-[var(--eg-line)] bg-[var(--eg-inset)] px-3 py-2">
-            <IconShield size={16} className="text-[#FF7A29]" />
-            <span className="font-display text-[12.5px] font-bold tracking-wide text-[var(--eg-text)]">
+          {/* 标题栏（Tauri 桌面版可拖动 + 真实窗口控制） */}
+          <div className="flex items-center gap-2 border-b border-[var(--eg-line)] bg-[var(--eg-inset)] px-3 py-2" data-tauri-drag-region>
+            <IconShield size={22} />
+            <span className="font-display text-[12.5px] font-bold tracking-wide text-[var(--eg-text)]" data-tauri-drag-region>
               TaskWarden <span className="font-mono text-[10px] font-normal text-[var(--eg-muted)]">— 轻量级任务守护监督器 v0.1.0</span>
             </span>
-            <span className="ml-2 hidden items-center gap-1 rounded-[4px] border border-[rgba(62,207,110,0.4)] bg-[rgba(62,207,110,0.08)] px-1.5 py-px font-mono text-[9.5px] text-[#3ECF6E] md:flex">
-              <span className="h-1 w-1 rounded-full bg-[#3ECF6E] pulse-dot" /> 单实例 · Global\TaskWarden
+            <span className="ml-2 hidden items-center gap-1 rounded-[4px] border border-[rgba(62,207,110,0.4)] bg-[rgba(62,207,110,0.08)] px-1.5 py-px font-mono text-[9.5px] text-[#3ECF6E] md:flex" data-tauri-drag-region>
+              <span className="h-1 w-1 rounded-full bg-[#3ECF6E] pulse-dot" /> 单实例 · single-instance 插件
             </span>
             <span className="ml-auto flex items-center gap-1">
               <button
                 className="mr-1 hidden items-center gap-1 rounded-[5px] border border-[var(--eg-line)] px-2 py-[3px] font-mono text-[9.5px] text-[var(--eg-muted)] transition-colors hover:border-[#7AD4E8] hover:text-[#7AD4E8] md:flex"
-                title="模拟再次运行 TaskWarden.exe：单实例互斥体将拦截新进程并激活已有窗口"
+                title="模拟再次运行 TaskWarden.exe：单实例插件将拦截新进程并激活已有窗口"
                 onClick={() => {
                   sim.notify(
                     "info",
-                    '单实例拦截：CreateMutexW("Global\\TaskWarden") 返回 ERROR_ALREADY_EXISTS —— 新进程已退出，仅激活已有窗口',
+                    "单实例拦截：tauri-plugin-single-instance 检测到二次启动 —— 新进程已退出，仅唤起已有主窗口",
                   );
                   setNudge(Date.now());
                 }}
               >
                 试双开
               </button>
-              <button
-                className={`${chipBtn} ${sim.faultInject ? "!bg-[rgba(245,184,75,0.16)] !text-[#F5B84B]" : ""}`}
-                style={sim.faultInject ? { boxShadow: "0 0 14px -2px rgba(245,184,75,0.55)" } : undefined}
-                title="故障注入（一次性）：下一次启动将在 spawn 处失败，演示启动失败反馈：托盘通知 + 卡片红框 + 错误详情"
-                onClick={() => sim.setFaultInject(!sim.faultInject)}
-              >
-                <IconBolt size={13} />
-              </button>
               <button className={chipBtn} title="切换深/浅主题" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
                 {theme === "dark" ? <IconSun size={13} /> : <IconMoon size={13} />}
               </button>
-              <button className={chipBtn} title="最小化"><span className="px-1 font-mono text-[12px]">—</span></button>
-              <button className={chipBtn} title="最大化"><span className="block h-[9px] w-[9px] rounded-[2px] border border-current" /></button>
-              <button className={`${chipBtn} hover:!bg-[#F0564A] hover:!text-white`} title="最小化到系统托盘（并不退出）" onClick={() => setView("tray")}>
+              <button className={chipBtn} title="最小化到系统托盘" onClick={() => (appMode ? winControl("hide") : setView("tray"))}>
+                <span className="px-1 font-mono text-[12px]">—</span>
+              </button>
+              <button className={chipBtn} title="最大化" onClick={() => winControl("toggleMaximize")}>
+                <span className="block h-[9px] w-[9px] rounded-[2px] border border-current" />
+              </button>
+              <button
+                className={`${chipBtn} hover:!bg-[#F0564A] hover:!text-white`}
+                title={appMode ? "关闭窗口（询问：收起到托盘或退出）" : "最小化到系统托盘（并不退出）"}
+                onClick={() => (appMode ? setClosePrompt(true) : setView("tray"))}
+              >
                 <IconX size={13} />
               </button>
             </span>
@@ -137,7 +149,7 @@ export default function SimulatorWindow({ sim }: { sim: Simulator }) {
           </div>
 
           {/* 任务网格 */}
-          <div className="grid grid-cols-1 gap-3 p-4 md:grid-cols-2 xl:grid-cols-3">
+          <div className={`grid grid-cols-1 gap-3 p-4 md:grid-cols-2 xl:grid-cols-3 ${appMode ? "flex-1 min-h-0 overflow-y-auto" : ""}`}>
             {sorted.map((t) => (
               <TaskCard
                 key={t.id}
@@ -176,15 +188,14 @@ export default function SimulatorWindow({ sim }: { sim: Simulator }) {
 
           {/* 全局状态栏 */}
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-[var(--eg-line)] bg-[var(--eg-inset)] px-4 py-1.5 font-mono text-[10px] text-[var(--eg-muted)]">
-            <span className="flex items-center gap-1.5">
+            <span className="flex items-center gap-1.5" title={sim.configPath}>
               <IconFile size={11} className="text-[#FF9557]" />
-              %APPDATA%\TaskWarden\config.toml
+              <span className="max-w-[300px] truncate">{sim.configPath}</span>
             </span>
             <span>派生 {sim.stats.spawned} · 重启 {sim.stats.restarts}</span>
             <span className={`hidden truncate sm:block ${sim.stats.lastError ? "text-[#FF7B70]" : ""}`}>
               {sim.stats.lastError ? `上次错误：${sim.stats.lastError}` : "✓ 无异常"}
             </span>
-            <span className="ml-auto opacity-70">egui 0.3x · eframe · Job Object · Ring Buffer</span>
           </div>
 
           {/* 托盘气泡通知 */}
@@ -220,6 +231,16 @@ export default function SimulatorWindow({ sim }: { sim: Simulator }) {
                 sim.deleteTask(confirmDel.id);
                 setConfirmDel(null);
               }}
+            />
+          )}
+          {closePrompt && (
+            <ConfirmDialog
+              title="确认关闭窗口"
+              desc="TaskWarden 可驻留系统托盘继续守护后台任务，或退出程序（将终止所有子进程）。"
+              confirmText="退出程序"
+              cancelText="收起到托盘"
+              onCancel={() => { winControl("hide"); setClosePrompt(false); }}
+              onConfirm={() => { invoke("shutdown").catch(console.error); getCurrentWindow().close(); }}
             />
           )}
         </div>
@@ -279,8 +300,8 @@ export default function SimulatorWindow({ sim }: { sim: Simulator }) {
             title="左键：显示/恢复主窗口 · 右键：菜单"
             className="group flex items-center gap-2.5 rounded-full border border-[rgba(255,122,41,0.5)] bg-ink-800/95 py-2 pl-2.5 pr-4 shadow-[0_16px_44px_-10px_rgba(0,0,0,0.75)] backdrop-blur transition-all hover:border-[#FF9557] hover:shadow-[0_16px_50px_-8px_rgba(255,122,41,0.35)]"
           >
-            <span className="relative flex h-7 w-7 items-center justify-center rounded-full bg-[rgba(255,122,41,0.15)]">
-              <IconShield size={15} className="text-[#FF9557]" />
+            <span className="relative flex h-8 w-8 items-center justify-center rounded-full bg-[rgba(255,122,41,0.15)]">
+              <IconShield size={19} />
               {view === "tray" && <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-[#3ECF6E] pulse-dot" />}
             </span>
             <span className="text-left leading-tight">

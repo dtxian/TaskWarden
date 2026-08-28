@@ -25,9 +25,9 @@
   --color-err-500: #f0564a;
   --color-cyanx-400: #7ad4e8;
   --color-cyanx-500: #53c1de;
-  --font-display: "Chakra Petch", "Noto Sans SC", sans-serif;
-  --font-body: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
-  --font-mono: "JetBrains Mono", "Noto Sans SC", ui-monospace, monospace;
+  --font-display: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+  --font-body: "Microsoft YaHei", "Segoe UI", "PingFang SC", sans-serif;
+  --font-mono: "Consolas", "Cascadia Mono", "Courier New", ui-monospace, monospace;
 }
 
 html {

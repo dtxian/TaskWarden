@@ -1,5 +1,22 @@
 node_modules/
 .next/
 dist/
-build/
 *.log
+
+# build/ 目录：产物忽略、矢量源与生成脚本入库
+build/*
+!build/app-icon.svg
+!build/tray-icon.svg
+!build/gen-icon.mjs
+!build/gen-tray.mjs
+
+# 便携运行数据（exe 同级），绝不入库
+data/
+src-tauri/data/
+
+# Added by cargo
+
+/target
+
+# 截图/介绍页素材，不入库
+静态介绍页面.png

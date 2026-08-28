@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 32 32">
+  <defs>
+    <linearGradient id="traySh" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFC191"/>
+      <stop offset="0.5" stop-color="#FF8A3D"/>
+      <stop offset="1" stop-color="#EF5C0A"/>
+    </linearGradient>
+  </defs>
+  <!-- 托盘专用：无底板、盾牌几乎撑满画布、粗描边，16~40px 下都饱满清晰 -->
+  <path d="M16 0.8 L29.6 6 V14.8 C29.6 22.4 23.9 28.4 16 31.4 C8.1 28.4 2.4 22.4 2.4 14.8 V6 Z"
+        fill="#FF7A29" fill-opacity="0.18" stroke="url(#traySh)" stroke-width="2.6" stroke-linejoin="round"/>
+  <path d="M9.4 15 H13.2 L15 10.8 L17.6 19.6 L19.4 14.7 H22.8"
+        fill="none" stroke="#FF9557" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import type { LogLine, SimTask } from "../../sim/useSimulator";
 import { fmtClock, LOG_CAP } from "../../sim/useSimulator";
 import { IconCheck, IconCopy, IconTerminal, IconX } from "../ui";
 
 /* ------------------------------------------------------------------ */
-/* 实时日志面板：Ring Buffer 回看 · 自动滚动 · ERR 标红 · 清空/复制       */
+/* 实时日志面板：Ring Buffer 回看 · 自动滚动 · ERR 标红 · 清空/复制        */
+/* 顶部拖拽把手：按住上下拖动调整日志区高度（localStorage 持久化，双击复位） */
 /* ------------------------------------------------------------------ */
 
 const LEVEL_STYLE: Record<LogLine["level"], string> = {
@@ -14,6 +15,25 @@ const LEVEL_STYLE: Record<LogLine["level"], string> = {
   SYS: "text-[#7AD4E8]",
 };
 
+const LS_KEY = "taskw…t-v1";
+const DEFAULT_H = 196;
+const MIN_H = 120;
+
+function clampHeight(v: number) {
+  const max = Math.max(MIN_H, Math.min(1000, window.innerHeight - 300));
+  return Math.min(max, Math.max(MIN_H, v));
+}
+
+function initialHeight(): number {
+  try {
+    const v = Number(localStorage.getItem(LS_KEY));
+    if (Number.isFinite(v) && v >= MIN_H) return clampHeight(v);
+  } catch {
+    /* 存储不可用则默认 */
+  }
+  return DEFAULT_H;
+}
+
 interface Props {
   task: SimTask | null;
   lines: LogLine[];
@@ -22,15 +42,40 @@ interface Props {
   onClear: () => void;
 }
 
-export default function LogPanel({ task, lines, autoScroll, onToggleAutoScroll, onClear }: Props) {
+function LogPanel({ task, lines, autoScroll, onToggleAutoScroll, onClear }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [copied, setCopied] = useState(false);
+  const [h, setH] = useState<number>(initialHeight);
+  const drag = useRef<{ startY: number; startH: number } | null>(null);
 
   useEffect(() => {
     if (autoScroll && scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [lines, autoScroll]);
+
+  const onPointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    drag.current = { startY: e.clientY, startH: h };
+    e.currentTarget.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  }, [h]);
+
+  const onPointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    const d = drag.current;
+    if (!d) return;
+    setH(clampHeight(d.startH - (e.clientY - d.startY))); // 向上拖 → 日志区变高
+  }, []);
+
+  const endDrag = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (!drag.current) return;
+    drag.current = null;
+    e.currentTarget.releasePointerCapture(e.pointerId);
+    try {
+      localStorage.setItem(LS_KEY, String(h));
+    } catch {
+      /* 忽略 */
+    }
+  }, [h]);
 
   const copy = async () => {
     const text = lines.map((l) => `[${fmtClock(l.t)}] [${l.level}] ${l.msg}`).join("\n");
@@ -48,6 +93,29 @@ export default function LogPanel({ task, lines, autoScroll, onToggleAutoScroll, 
 
   return (
     <div className="border-t border-[var(--eg-line)] bg-[var(--eg-panel)]">
+      {/* 拖拽把手：调节日志区高度 */}
+      <div
+        role="separator"
+        aria-orientation="horizontal"
+        title="按住上下拖动调整日志区高度 · 双击恢复默认"
+        className="group relative h-[7px] shrink-0 cursor-row-resize select-none touch-none bg-transparent"
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={endDrag}
+        onPointerCancel={endDrag}
+        onDoubleClick={() => {
+          setH(DEFAULT_H);
+          try {
+            localStorage.removeItem(LS_KEY);
+          } catch {
+            /* 忽略 */
+          }
+        }}
+      >
+        <div className="absolute inset-x-0 top-0 h-px bg-[var(--eg-line)] transition-colors group-hover:bg-[#FF7A29]/70" />
+        <div className="absolute left-1/2 top-1/2 h-[3px] w-10 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[var(--eg-line)] opacity-0 transition-opacity group-hover:opacity-100 group-hover:bg-[#FF7A29]" />
+      </div>
+
       {/* 面板头 */}
       <div className="flex items-center gap-2 px-3 py-2">
         <IconTerminal size={13} className="text-[#FF9557]" />
@@ -82,7 +150,11 @@ export default function LogPanel({ task, lines, autoScroll, onToggleAutoScroll, 
       </div>
 
       {/* 日志流 */}
-      <div ref={scrollRef} className="h-[196px] overflow-y-auto border-t border-[var(--eg-line-soft)] bg-[var(--eg-inset)] px-3 py-2 font-mono text-[11px] leading-[1.7]">
+      <div
+        ref={scrollRef}
+        style={{ height: h }}
+        className="overflow-y-auto border-t border-[var(--eg-line-soft)] bg-[var(--eg-inset)] px-3 py-2 font-mono text-[11px] leading-[1.7]"
+      >
         {lines.length === 0 && (
           <div className="flex h-full items-center justify-center text-[11px] text-[var(--eg-muted)]">
             {task ? "暂无日志 —— 启动任务或触发操作后，输出将实时回放到此环状缓冲区" : "点击上方任务卡片查看其日志"}
@@ -99,3 +171,16 @@ export default function LogPanel({ task, lines, autoScroll, onToggleAutoScroll, 
     </div>
   );
 }
+
+/**
+ * 日志面板仅在选中任务/日志内容/自动滚动开关变化时重渲染：
+ * lines 为父层每帧重建的引用，故按「长度 + 末行 id」判内容等价；
+ * 函数 props 为内联闭包，其捕获值仅随 selectedId / autoScroll 变化，忽略其引用。
+ * 面板自身拖拽高度、复制态为内部 state，不受 memo 影响。
+ */
+export default memo(LogPanel, (a, b) =>
+  a.task === b.task &&
+  a.autoScroll === b.autoScroll &&
+  a.lines.length === b.lines.length &&
+  a.lines[a.lines.length - 1]?.id === b.lines[b.lines.length - 1]?.id,
+);
