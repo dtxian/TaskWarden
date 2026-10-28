@@ -10,7 +10,7 @@
 use std::collections::VecDeque;
 use std::path::PathBuf;
 use std::process::Child;
-use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender};
+use std::sync::mpsc::{Receiver, RecvTimeoutError, SyncSender};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -312,7 +312,7 @@ pub struct Supervisor {
     log_root: PathBuf,
     evt_tx: EventSender,
     /// 命令通道自持克隆：探针/回收线程经回灌命令把结果交还引擎线程
-    self_tx: Sender<Command>,
+    self_tx: SyncSender<Command>,
     stats: StatsView,
     fault_inject: bool,
     state: Arc<Mutex<SharedState>>,
@@ -321,7 +321,7 @@ pub struct Supervisor {
 }
 
 impl Supervisor {
-    fn new(cfg: Config, config_path: PathBuf, evt_tx: EventSender, state: Arc<Mutex<SharedState>>, self_tx: Sender<Command>) -> Self {
+    fn new(cfg: Config, config_path: PathBuf, evt_tx: EventSender, state: Arc<Mutex<SharedState>>, self_tx: SyncSender<Command>) -> Self {
         let window = Duration::from_secs(cfg.settings.breaker_window_sec.max(1));
         let max = cfg.settings.breaker_max_fails.max(1);
         let log_root = Config::resolve_log_dir(&cfg.settings.log_dir);
@@ -357,21 +357,28 @@ impl Supervisor {
         }
     }
 
-    /// 启动监督器线程。返回（命令发送端, 共享状态, 事件发送端, 事件接收端）。
+    /// 启动监督器线程。返回（命令发送端, 共享状态, 事件发送端, 事件接收端, 线程句柄）。
     pub fn launch(
         cfg: Config,
         config_path: PathBuf,
-    ) -> (Sender<Command>, Arc<Mutex<SharedState>>, EventSender, crate::core::events::EventReceiver) {
+    ) -> (
+        SyncSender<Command>,
+        Arc<Mutex<SharedState>>,
+        EventSender,
+        crate::core::events::EventReceiver,
+        std::thread::JoinHandle<()>,
+    ) {
         let (evt_tx, evt_rx) = channel_events();
         let state = Arc::new(Mutex::new(SharedState::default()));
-        let (cmd_tx, cmd_rx) = std::sync::mpsc::channel::<Command>();
+        // 有界命令队列：FFI 用 try_send 非阻塞投递，满则返回 -2（见 ffi.rs）
+        let (cmd_tx, cmd_rx) = std::sync::mpsc::sync_channel::<Command>(256);
         let mut sup = Self::new(cfg, config_path, evt_tx.clone(), state.clone(), cmd_tx.clone());
         sup.sync_views();
-        std::thread::Builder::new()
+        let handle = std::thread::Builder::new()
             .name("supervisor".into())
             .spawn(move || sup.run(cmd_rx))
             .expect("spawn supervisor thread");
-        (cmd_tx, state, evt_tx, evt_rx)
+        (cmd_tx, state, evt_tx, evt_rx, handle)
     }
 
     fn run(&mut self, cmd_rx: Receiver<Command>) {

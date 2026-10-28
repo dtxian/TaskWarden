@@ -9,6 +9,7 @@
 #![allow(dead_code)]
 
 pub mod core;
+pub mod ffi;
 pub mod infra;
 pub mod runtime;
 

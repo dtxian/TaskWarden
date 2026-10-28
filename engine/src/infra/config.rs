@@ -6,10 +6,20 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 
 use serde::{Deserialize, Serialize};
 
 use crate::core::error::Error;
+
+/// 数据根目录覆盖（FFI tw_engine_new 传入；静态库进程内以宿主 exe 为准，
+/// 但允许冒烟测试/嵌入方显式指定便携 data 目录）。
+static DATA_DIR_OVERRIDE: OnceLock<PathBuf> = OnceLock::new();
+
+/// 设置数据根目录覆盖（仅首次生效，通常由 tw_engine_new 在加载配置前调用）。
+pub fn set_data_dir_override(dir: &Path) {
+    let _ = DATA_DIR_OVERRIDE.set(dir.to_path_buf());
+}
 
 pub const DEFAULT_LOG_DIR: &str = "logs";
 pub const DEFAULT_BREAKER_WINDOW_SEC: u64 = 60;
@@ -171,6 +181,9 @@ pub struct Config {
 impl Config {
     /// 数据根目录：`<exe 所在目录>\data`（单文件便携：配置与日志跟随程序目录）
     pub fn data_dir() -> PathBuf {
+        if let Some(d) = DATA_DIR_OVERRIDE.get() {
+            return d.clone();
+        }
         let exe_dir = std::env::current_exe()
             .ok()
             .and_then(|e| e.parent().map(|p| p.to_path_buf()))

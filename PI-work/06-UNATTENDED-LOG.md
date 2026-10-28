@@ -42,6 +42,24 @@
 
 （后续里程碑在此追加）
 
+## M2 · C ABI + 冒烟 ✅（约 0.3 天）
+
+**做了什么**
+- `engine/src/ffi.rs`：§4 全部函数；每个入口 catch_unwind（panic→last_error→-1）；命令 try_send（队列满→-2）；快照/日志/通知 JSON 复用 camelCase DTO；tw_engine_free 同步 shutdown。
+- 因 Rust 1.98 无界 `mpsc::Sender` 已移除 `try_send`，引擎命令通道改为**有界 `sync_channel(256)`**（`SyncSender::try_send`），supervisor 内部回灌（ProbeDone/StopDone）仍用阻塞 send。
+- config.rs 增加 `set_data_dir_override`（OnceLock），让 `tw_engine_new(data_dir)` 参数真实生效。
+- `Supervisor::launch` 返回值增加 JoinHandle（同步终结用）。
+- `desktop/src/twengine.h` + `desktop/smoke/ffi_smoke.cpp`：C++ 控制台冒烟。
+- CMake 增加 `ffi_smoke` 目标（链接 Rust 静态库 + kernel32/ntdll/userenv/ws2_32/dbghelp）；`/utf-8` 编译选项（MSVC 默认 GBK 会误编译中文，后续 UI 必罘）。
+
+**验证**
+- `cargo test`：**24/24 通过**（22 引擎 + 2 ffi DTO 序列化，恢复原 24 测试总量）。
+- `ffi_smoke`：**PASS** —— 5/5 种子任务（camelCase JSON 正确）；`tw_add_task`→`tw_start`→状态 `running`（PID 6156）→`tw_stop`→`stopped`；日志回看完整链路（创建/派生/绑定 Job/强杀）；taskkill 输出确认整棵树终结。
+- 快照 JSON 字段与 `src/sim/useSimulator.ts` 对齐（probeMs/healthMode/backoffUntilMs…）。
+
+**遗留 / 下一步**
+- 无。进入 M3 Qt 外壳。
+
 ## M1 · 引擎搬迁 ✅（约 0.2 天）
 
 **做了什么**
