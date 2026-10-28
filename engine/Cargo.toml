@@ -1,0 +1,47 @@
+[package]
+name = "taskwarden_engine"
+version = "0.1.0"
+description = "TaskWarden 守护引擎（Rust 静态库，经 C ABI 供 Qt 壳调用）"
+authors = ["TaskWarden"]
+license = "MIT"
+edition = "2021"
+rust-version = "1.77.2"
+
+[lib]
+name = "taskwarden_engine"
+crate-type = ["staticlib", "rlib"]
+
+[dependencies]
+# 序列化 / 配置（快照 JSON 与 config.toml）
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "1"
+thiserror = "2"
+log = "0.4"
+
+# Windows 原生 API（Job Object / 进程 / 系统信息 / OEM 代码页解码）
+windows = { version = "0.62", features = [
+  "Win32_Foundation",
+  "Win32_Globalization",
+  "Win32_Security",
+  "Win32_System_Threading",
+  "Win32_System_JobObjects",
+  "Win32_System_SystemInformation",
+  "Win32_UI_WindowsAndMessaging",
+] }
+
+# GPU 采样（NVML，容错）
+nvml-wrapper = "0.12"
+
+# ------------------------------------------------------------------ #
+# Release size profile（沿用 Tauri 版实测口径）。
+#   lto=fat + codegen-units=1 : 跨 crate 内联 / 死代码消除
+#   opt-level="s"             : 引擎是 250ms tick 循环，非计算密集，换体积
+#   strip=true                : 去符号表
+# panic = "abort" 刻意不设：supervisor.rs::run() 依赖 catch_unwind 保活引擎线程。
+# ------------------------------------------------------------------ #
+[profile.release]
+opt-level = "s"
+lto = "fat"
+codegen-units = 1
+strip = true

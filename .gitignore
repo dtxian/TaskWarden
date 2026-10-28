@@ -20,3 +20,9 @@ src-tauri/data/
 
 # 截图/介绍页素材，不入库
 静态介绍页面.png
+
+# Qt 迁移产物
+engine/target/
+desktop/build/
+desktop/out/
+_spike/
