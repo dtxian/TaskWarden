@@ -42,6 +42,39 @@
 
 （后续里程碑在此追加）
 
+## M6 · 打包与文档 ✅（约 0.2 天）
+
+**做了什么**
+- `THIRD_PARTY_NOTICES.md`：Qt 6 LGPLv3（动态链接 + 随包 DLL，履行 LGPL 义务）+ Rust 生态 crate 清单。
+- `README.md`：定位/徽章/架构/界面/快速开始/许可证全面更新为 Qt 桌面版（Tauri 版标注为退路）。
+- `AGENTS.md`：§1 定位 + §2 目录树加入 `desktop/`、`engine/`、`THIRD_PARTY_NOTICES.md`。
+- 产物：`desktop/build/Release/taskwarden.exe`（1.4MB）+ Qt DLL（windeployqt）；`engine/target/release/taskwarden_engine.lib`（29.3MB，仅构建中间产物，链接后 exe 仅 1.4MB）。
+
+**验证**
+- `cargo test`：**24/24 通过**；release 静态库 + CMake 全量构建通过。
+- 干净启动（种子 5 任务）：窗口正常，CPU 0.13%，WS 139.5MB / Private 69MB。
+
+---
+
+## 最终汇报（全部里程碑）
+
+| 里程碑 | 状态 | 验收结果 | 实测内存 | 实测 CPU | 用时 |
+|---|---|---|---|---|---|
+| M0 骨架 | ✅ | staticlib + 空窗口可跑 | WS 37.9 / Priv 7.4 | — | ~0.2 天 |
+| M1 引擎搬迁 | ✅ | 22 测试绿（原样搬零改动） | — | — | ~0.2 天 |
+| M2 C ABI | ✅ | ffi_smoke PASS（5 种子/start→running/stop→stopped） | 引擎-only WS 29.8 / Priv 20.8 | — | ~0.3 天 |
+| M3 Qt 外壳 | ✅ | 单实例=1；CloseMainWindow 后进程存活窗口隐藏 | WS 133 / Priv 64 | 0.08% | ~0.4 天 |
+| M4 任务区+日志 | ✅ | 12 任务反馈链正确；Job 级联回收 0 残留 | Priv 73（稳定） | 0% | ~0.6 天 |
+| M5 表单弹窗 | ✅ | 增删改接线 + 成环禁用 + 删除确认 | — | 0.23% | ~0.4 天 |
+| M6 打包文档 | ✅ | exe+Qt DLL 可拷走；NOTICE/README/AGENTS 更新 | WS 139.5 / Priv 69（种子基线） | 0.13% | ~0.2 天 |
+
+- **cargo test**：24/24 通过（22 引擎 + 2 ffi DTO，含 `ping_pipe_decodes_without_mojibake` e2e）。
+- **产物**：`desktop/build/Release/taskwarden.exe`（1.4MB）+ Qt DLL 同目录；数据目录 `<exe>\data`。
+- **进程数**：单进程（守护子进程除外）；单实例二次启动不新增进程。
+- **截图**：无人值守 RDP 会话 CopyFromScreen 不可靠（M0 可用后断开），已保存 `desktop/build/m4-window.png` 供人工查看；验证以 tasklist/PowerShell 实测为准。
+- **未完成项**：30 分钟长跑（已证 2.5 分钟稳定 + 架构无无限结构）；内存 WorkingSet 未达计划 ≤100MB（Private 稳定 ~69–73MB，已是 Tauri 330–365MB 的 ~2.5x 下降）。
+- **下一步建议**：在真实 Windows 桌面会话肉眼验收 UI；补 30 分钟长跑；若需压 WS，可从 Qt 字体缓存 / NVML 懒加载 / 进一步精简 windows crate 特性入手。
+
 ## M5 · 表单与弹窗 ✅（约 0.4 天）
 
 **做了什么**

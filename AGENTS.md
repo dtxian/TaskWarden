@@ -7,15 +7,19 @@
 
 ## 1. 项目定位（一句话）
 
-**TaskWarden = 轻量级后台任务守护监督器，Windows 专用，Rust 引擎 + Tauri 2 壳 + React 界面，单文件 exe + 便携数据目录。**
+**TaskWarden = 轻量级后台任务守护监督器，Windows 专用，Rust 引擎 + Qt 6 Widgets 桌面壳（旧 Tauri 2 壳 + React 界面保留为退路），单进程 + 便携数据目录。**
 它常驻系统托盘，负责「静默拉起 / 看着 / 收掉」常驻进程：`CREATE_NO_WINDOW` 无黑框派生、Job Object 进程树管控、滑动窗口熔断 + 指数退避、DAG 依赖级联、健康探针、实时日志。
 
-同一份前端代码承担**两种身份**（由 `isTauri` 分流）：
+> **2026-10-29 Qt 迁移（feat/qt 分支）**：桌面壳已从 Tauri 2 + WebView2 迁至 **Qt 6 Widgets（C++20）+ Rust 静态库（C ABI）**，单进程、无 WebView2、实测内存 ~2.5x 下降。
+> 详见 `PI-work/06-Qt-迁移执行计划.md`、`PI-work/06-UNATTENDED-LOG.md`；引擎 `core/ runtime/ infra/` 原样复用，`backend.rs` 被 `engine/src/ffi.rs` 取代。
+
+桌面壳有两种身份：
 
 | 运行环境 | 入口 | 数据源 | 界面 |
 |---|---|---|---|
 | 浏览器 / GitHub Pages | `LandingApp` | `useSimulatorMock()`（本地模拟引擎，不启动任何真实进程） | 产品介绍页 + 可交互高保真原型 |
-| Tauri 桌面版 | `SoftwareApp` | `useSimulatorLive()`（`invoke` + `listen`） | 只有软件本体窗口，无介绍/架构/代码区 |
+| Qt 桌面版（新） | `desktop/` | `EngineClient`（C ABI + 250ms 轮询快照） | 软件本体窗口（任务卡/日志/表单/托盘） |
+| Tauri 桌面版（退路） | `SoftwareApp` | `useSimulatorLive()`（`invoke` + `listen`） | 只有软件本体窗口 |
 
 落地页同时是「工程设计文档」：`src/data/content.ts`（模块树/分层/承诺/性能/边界文案）与 `src/data/snippets.ts`（8 段实现代码展示）。
 
@@ -24,7 +28,21 @@
 ## 2. 目录与关键文件
 
 ```
-src/                     React 前端（WebView2 内渲染）
+desktop/                 Qt 6 Widgets 桌面壳（新，主桌面端；CMake + MSVC）
+├─ src/EngineClient.*    C ABI 包装 + QTimer 250ms 轮询 + QJsonDocument 解析
+├─ src/MainWindow.*      资源栏 + 任务卡网格(1/2/3 列) + 日志面板 + 状态栏
+├─ src/TaskCard.* LogPanel.* TaskDialog.* TrayController.* SingleInstance.* Sparkline.*
+├─ src/Args.h            parseArgs/kindFromExt/buildCommandText（与 TS/Rust 三端镜像）
+├─ src/Format.h          时长/时钟/状态排序权重
+├─ src/twengine.h        C ABI 声明（与 engine/src/ffi.rs 对齐）
+├─ resources/            qrc 图标 + dark.qss
+└─ smoke/ffi_smoke.cpp   C ABI 冒烟（无 Qt）
+
+engine/                  Rust 引擎静态库（crate-type = staticlib + rlib）
+├─ Cargo.toml            仅 serde/serde_json/toml/thiserror/log/windows/nvml-wrapper
+└─ src/                  ffi.rs（C ABI，替代 backend.rs）+ core/ runtime/ infra/（原样复用）
+
+src/                     React 前端（WebView2 内渲染，落地页 + 原型）
 ├─ App.tsx               入口分流 isTauri → SoftwareApp / LandingApp
 ├─ index.css             Tailwind v4 @theme 令牌(ink/fog/rust/ok/err/cyanx) + .egui/.eg-light 的 --eg-* 变量
 ├─ sim/useSimulator.ts   ★ 数据层核心：类型定义、mock 引擎、live 管线、DTO 映射、parseArgs/topoLevels
@@ -33,7 +51,7 @@ src/                     React 前端（WebView2 内渲染）
 ├─ components/ui.tsx     内联 SVG 图标集 + Scramble/Reveal/CodeBlock/Sparkline
 └─ data/                 content.ts · snippets.ts（落地页文案与代码展示）
 
-src-tauri/               Rust 后端（Tauri 2）
+src-tauri/               Rust 后端（Tauri 2，退路保留）
 ├─ src/lib.rs            装配：plugin-log → dialog → single-instance → backend::init → 15 条命令注册
 ├─ src/backend.rs        对接层：DTO 序列化 + snapshot/log-event/notice 推送 + 托盘 + #[tauri::command]
 ├─ src/core/             supervisor.rs(1297行,状态机/引擎) · scheduler.rs(DAG) · breaker.rs · health.rs · events.rs · error.rs

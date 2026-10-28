@@ -1,15 +1,15 @@
 # TaskWarden
 
-> 轻量级后台任务守护监督器 · Windows 专用 · **Rust 引擎 + Tauri 2 壳 + React 界面**
+> 轻量级后台任务守护监督器 · Windows 专用 · **Rust 引擎 + Qt 6 Widgets 桌面壳**（旧 Tauri 版保留为退路）
 
 常驻系统托盘守护后台任务：**静默启动、进程树管控、熔断重试、DAG 依赖级联、健康探针、实时日志**。
-纯 std 线程 + mpsc 的 Rust 监督内核，配高保真 React（WebView2 渲染）界面，**单文件 exe、便携数据目录**。
+纯 std 线程 + mpsc 的 Rust 监督内核，配 Qt 6 原生桌面界面（无 WebView2），**单进程、便携数据目录**。
 
 <p align="center">
   <a href="https://dtxian.github.io/TaskWarden/"><img src="https://img.shields.io/badge/在线演示-GitHub%20Pages-blue?logo=github" alt="在线演示"></a>
   <img src="https://img.shields.io/badge/platform-Windows-0078d6?logo=windows" alt="Windows">
-  <img src="https://img.shields.io/badge/backend-Rust%20%7C%20Tauri%202-orange?logo=rust" alt="Rust/Tauri">
-  <img src="https://img.shields.io/badge/frontend-React%20%7C%20Vite-61dafb?logo=react" alt="React/Vite">
+  <img src="https://img.shields.io/badge/backend-Rust-orange?logo=rust" alt="Rust">
+  <img src="https://img.shields.io/badge/desktop-Qt%206%20Widgets-41cd52?logo=qt" alt="Qt">
   <img src="https://img.shields.io/badge/license-MIT-green" alt="MIT">
 </p>
 
@@ -41,23 +41,28 @@
 
 ## 🏗 架构
 
-**前端（React）与后端（Rust）解耦，经 Tauri IPC（`invoke` 命令 + 事件流）通信。**
+**桌面壳（Qt 6 Widgets，C++20）与引擎（Rust 静态库，C ABI）解耦，经 UTF-8 字符串 + JSON 交互。**
 
 ```
-├─ src/                      # Web 前端（React + Vite + Tailwind，跑在 WebView2）
-│  ├─ sim/useSimulator.ts    #   数据层双路径：Tauri 下 invoke+listen，浏览器下本地 mock（语义对齐后端）
-│  └─ components/sim/        #   主窗口 / 任务卡片 / 日志面板 / 编辑弹窗
+├─ desktop/                  # Qt 6 Widgets 桌面壳（新，主桌面端）
+│  ├─ src/EngineClient.*     #   C ABI 包装 + QTimer 250ms 轮询 + QJsonDocument 解析
+│  ├─ src/MainWindow.*       #   资源栏 + 任务卡网格(1/2/3 列) + 日志面板 + 状态栏
+│  ├─ src/TaskCard.*         #   任务卡（状态色/健康/依赖/操作）
+│  ├─ src/LogPanel.*         #   实时日志（三色分级/自动滚动）
+│  ├─ src/TaskDialog.*       #   添加/编辑表单（校验 + 依赖成环禁用）
+│  ├─ src/TrayController.*   #   系统托盘；SingleInstance.* 单实例
+│  └─ resources/             #   qrc 图标 + dark.qss
 │
-└─ src-tauri/                # Rust 后端（Tauri 2，含系统托盘）
-   ├─ src/backend.rs         #   对接层：Tauri command + snapshot/log-event/notice 推送 + 托盘
-   ├─ src/core/              #   核心调度：监督器状态机 / DAG / 熔断 / 健康探针 / 事件协议
-   ├─ src/runtime/           #   进程运行时：静默派生 + 编码解码 / Job Object / 停止回收
-   └─ src/infra/             #   基础设施：便携 config.toml / 定容 Ring Buffer + 落盘 / NVML 采样
+├─ engine/                   # Rust 引擎静态库（crate-type = staticlib）
+│  └─ src/                   # ffi.rs（C ABI） + core/ runtime/ infra/（原样复用）
+│
+├─ src/                      # Web 落地页 + 交互原型（浏览器 / GitHub Pages，React + Vite）
+└─ src-tauri/                # 旧 Tauri 2 桌面版（保留为退路，迁移验收前保持可构建）
 ```
 
-依赖单向向下：**表示层 → 核心调度 → 进程运行时 → 基础设施**；命令向下、事件向上。
+依赖单向向下：**表示层（Qt/React）→ 核心调度（core）→ 进程运行时（runtime）→ 基础设施（infra）**；命令向下、事件向上。
 
-**线程模型**：单一"监督引擎"线程（250ms 定节奏 tick，非阻塞 `try_recv` 批处理命令）+ 事件线程 + 快照线程（4Hz，窗口隐藏时跳过）+ 每子进程两条泵读线程 + 回收线程。**零异步运行时**（纯 std `thread` + `mpsc`）。
+**线程模型**：单一“监督引擎”线程（250ms 定节奏 tick，非阻塞 `try_recv` 批处理命令）+ 事件线程 + 每子进程两条泵读线程 + 回收线程。**零异步运行时**（纯 std `thread` + `mpsc`）。Qt 侧每 250ms 主动拉取快照（4Hz），按字段级 diff 只更新变化卡片。
 
 ---
 
@@ -80,31 +85,34 @@
 
 ## 🖥 界面
 
-桌面版无系统标题栏（自绘深色极客风窗口）：顶部资源栏（CPU / 内存 / GPU 迷你曲线）、状态徽章任务卡片网格、
-可拖拽调高的实时日志面板、右下角全局状态栏；关窗最小化到系统托盘（**独立撑满的托盘图标**，小尺寸下清晰），托盘右键显示 / 退出。
+Qt 桌面版为深色主题（QPalette + 有限 QSS）：顶部资源栏（CPU 迷你曲线 / 内存 / GPU / 运行时长 / 任务数）、状态徽章任务卡片网格（1/2/3 列自适应）、QSplitter 实时日志面板、底部全局状态栏；关窗收起到系统托盘（独立撑满的托盘图标），托盘右键显示 / 退出；二次启动仅激活已有窗口（单实例）。
 
 ---
 
 ## 🛠 快速开始
 
+### Qt 桌面版（新，主桌面端）
+
 ```bash
-# 1) 安装依赖
-npm install
+# 环境：Windows + Qt 6.9.3(msvc2022_64) + CMake 4.4 + MSVC 2022 + Rust 1.98(MSVC)
+source scripts/env.sh              # WSL 下：挂载盘符 + 代理 + 工具路径
 
-# 2) 开发模式（桌面窗口：起 vite + 增量编译 Rust）
-npm run tauri dev
+"$CARGO" build --release --manifest-path engine/Cargo.toml        # Rust 静态库
+"$CMAKE" -S desktop -B desktop/build -G "Visual Studio 17 2022" -A x64 \
+         -DCMAKE_PREFIX_PATH="D:/ProgramFiles/Qt/6.9.3/msvc2022_64"
+"$CMAKE" --build desktop/build --config Release                   # taskwarden.exe
+windeployqt --release --no-translations desktop/build/Release/taskwarden.exe
 
-# 3) 打包（仅产出单文件 exe，无安装程序）
-npm run tauri build
-#    → src-tauri/target/release/taskwarden.exe
+"$CARGO" test --manifest-path engine/Cargo.toml                   # 24 个 Rust 测试（含 ping 解码 e2e）
+```
 
-# 4) 纯浏览器预览交互原型（端口 1400，跑 mock 数据）
-npm run dev
+产物：`desktop/build/Release/` 下的 `taskwarden.exe` + Qt DLL（整个文件夹拷走即用，单进程无 WebView2）。
 
-# 5) 测试与类型检查
-npm test          # 前端纯函数单测（vitest）
-cargo test --manifest-path src-tauri/Cargo.toml   # 后端（含真进程 ping 解码 e2e）
-npm run typecheck
+### 旧 Tauri 版（退路）
+
+```bash
+npm install && npm run tauri build   # 单文件 exe（需 WebView2 运行时）
+npm run dev                          # 浏览器交互原型（mock 数据，端口 1400）
 ```
 
 首次运行会在 `data\config.toml` 写入 5 个示例任务的种子配置。把任务路径改为本机真实存在的程序后点「启动」，
@@ -138,4 +146,5 @@ node build/gen-tray.mjs          # build/tray-icon.svg → 撑满画布的托盘
 
 ## 📄 许可证
 
-[MIT](LICENSE)
+- 应用本体：[MIT](LICENSE)
+- Qt 6 库：LGPLv3（动态链接，随包发 DLL）—— 见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)
