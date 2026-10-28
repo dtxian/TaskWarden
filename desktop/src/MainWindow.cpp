@@ -9,6 +9,7 @@
 #include "LogPanel.h"
 #include "Sparkline.h"
 #include "TaskCard.h"
+#include "TaskDialog.h"
 
 #include <QAction>
 #include <QApplication>
@@ -19,6 +20,8 @@
 #include <QHBoxLayout>
 #include <QJsonObject>
 #include <QLabel>
+#include <QMessageBox>
+#include <QPushButton>
 #include <QResizeEvent>
 #include <QScrollArea>
 #include <QScrollBar>
@@ -45,10 +48,12 @@ MainWindow::MainWindow(EngineClient* engine, QWidget* parent)
     tb->setObjectName(QStringLiteral("mainToolBar"));
     QAction* startAll = tb->addAction(QStringLiteral("启动全部"));
     QAction* stopAll = tb->addAction(QStringLiteral("停止全部"));
+    QAction* addTask = tb->addAction(QStringLiteral("添加任务"));
     faultInjectAct_ = tb->addAction(QStringLiteral("故障注入"));
     faultInjectAct_->setCheckable(true);
     connect(startAll, &QAction::triggered, this, [this] { engine_->startAll(); });
     connect(stopAll, &QAction::triggered, this, [this] { engine_->stopAll(); });
+    connect(addTask, &QAction::triggered, this, &MainWindow::openAddDialog);
     connect(faultInjectAct_, &QAction::toggled, this, [this](bool on) {
         if (on) {
             engine_->setFaultInject(true);
@@ -177,6 +182,23 @@ void MainWindow::closeEvent(QCloseEvent* e)
         e->accept();
         return;
     }
+    // 首次关闭询问一次：收起到托盘 or 退出；之后直接收起
+    if (!closePromptShown_) {
+        closePromptShown_ = true;
+        QMessageBox box(this);
+        box.setWindowTitle(QStringLiteral("TaskWarden"));
+        box.setText(QStringLiteral("关闭窗口后，任务将继续在后台守护。"));
+        box.setInformativeText(QStringLiteral("收起到系统托盘继续运行，还是停止全部任务并退出？"));
+        QPushButton* trayBtn = box.addButton(QStringLiteral("收起到托盘"), QMessageBox::AcceptRole);
+        QPushButton* quitBtn = box.addButton(QStringLiteral("退出程序"), QMessageBox::DestructiveRole);
+        box.setDefaultButton(trayBtn);
+        box.exec();
+        if (box.clickedButton() == quitBtn) {
+            e->accept();
+            requestQuit();
+            return;
+        }
+    }
     e->ignore();
     hide();
 }
@@ -270,6 +292,45 @@ void MainWindow::selectTask(const QString& id)
     pollSelectedLogs();
 }
 
+void MainWindow::openAddDialog()
+{
+    const QJsonArray tasks = engine_->snapshot().value(QStringLiteral("tasks")).toArray();
+    TaskDialog dlg(nullptr, tasks, this);
+    if (dlg.exec() == QDialog::Accepted) {
+        engine_->addTask(dlg.resultConfig());
+    }
+}
+
+void MainWindow::openEditDialog(const QString& id)
+{
+    const QJsonArray tasks = engine_->snapshot().value(QStringLiteral("tasks")).toArray();
+    for (const auto& v : tasks) {
+        const QJsonObject t = v.toObject();
+        if (t.value(QStringLiteral("name")).toString() == id) {
+            TaskDialog dlg(&t, tasks, this);
+            if (dlg.exec() == QDialog::Accepted) {
+                engine_->updateTask(dlg.resultConfig());
+            }
+            return;
+        }
+    }
+}
+
+void MainWindow::confirmDelete(const QString& id)
+{
+    const auto ret = QMessageBox::question(
+        this, QStringLiteral("删除任务"),
+        QStringLiteral("确定删除任务「%1」？日志文件将一并删除。").arg(id),
+        QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+    if (ret == QMessageBox::Yes) {
+        engine_->removeTask(id);
+        if (selectedId_ == id) {
+            selectedId_.clear();
+            logPanel_->setTask(QString());
+        }
+    }
+}
+
 void MainWindow::connectCard(TaskCard* card)
 {
     connect(card, &TaskCard::selectRequested, this, &MainWindow::selectTask);
@@ -278,17 +339,8 @@ void MainWindow::connectCard(TaskCard* card)
     connect(card, &TaskCard::restartRequested, this, [this](const QString& id) { engine_->restart(id); });
     connect(card, &TaskCard::crashRequested, this, [this](const QString& id) { engine_->crash(id); });
     connect(card, &TaskCard::resetRequested, this, [this](const QString& id) { engine_->resetBreaker(id); });
-    connect(card, &TaskCard::editRequested, this, [this](const QString& id) {
-        Q_UNUSED(id)
-        statusBar()->showMessage(QStringLiteral("编辑任务将在 M5 实现"), 3000);
-    });
-    connect(card, &TaskCard::deleteRequested, this, [this](const QString& id) {
-        engine_->removeTask(id);
-        if (selectedId_ == id) {
-            selectedId_.clear();
-            logPanel_->setTask(QString());
-        }
-    });
+    connect(card, &TaskCard::editRequested, this, &MainWindow::openEditDialog);
+    connect(card, &TaskCard::deleteRequested, this, &MainWindow::confirmDelete);
 }
 
 void MainWindow::syncCards(const QJsonArray& tasks)

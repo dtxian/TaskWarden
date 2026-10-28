@@ -4,6 +4,7 @@
 
 #include "TaskCard.h"
 
+#include "Args.h"
 #include "Format.h"
 
 #include <QHBoxLayout>
@@ -76,33 +77,6 @@ QToolButton* makeIconBtn(const QString& text, QWidget* parent)
         "QToolButton{background:transparent;color:#8a949e;border:1px solid #2a313a;border-radius:4px;padding:2px 7px;font-size:11px;}"
         "QToolButton:hover{color:#c8d0d8;border-color:#4a5560;}"));
     return b;
-}
-
-QString commandLine(const QJsonObject& t)
-{
-    const QString kind = t.value(QStringLiteral("kind")).toString();
-    const QString path = t.value(QStringLiteral("path")).toString();
-    const QJsonArray args = t.value(QStringLiteral("args")).toArray();
-    auto quote = [](const QString& s) -> QString {
-        if (s.isEmpty()) return s;
-        if (s.contains(QLatin1Char(' ')) && !(s.startsWith(QLatin1Char('"')) && s.endsWith(QLatin1Char('"')))) {
-            return QStringLiteral("\"%1\"").arg(s);
-        }
-        return s;
-    };
-    QStringList parts;
-    if (kind == QStringLiteral("exe")) {
-        parts << quote(path);
-    } else if (kind == QStringLiteral("bat")) {
-        parts << QStringLiteral("cmd") << QStringLiteral("/c") << quote(path);
-    } else {
-        parts << QStringLiteral("powershell") << QStringLiteral("-ExecutionPolicy") << QStringLiteral("Bypass")
-              << QStringLiteral("-File") << quote(path);
-    }
-    for (const auto& a : args) {
-        parts << quote(a.toString());
-    }
-    return parts.join(QLatin1Char(' '));
 }
 
 } // namespace
@@ -266,7 +240,13 @@ void TaskCard::setTask(const QJsonObject& task, qint64 nowMs)
     kind_->setText(km.label);
 
     // 命令行（省略过长）
-    const QString full = commandLine(task);
+    QStringList argList;
+    const QJsonArray argsArr = task.value(QStringLiteral("args")).toArray();
+    for (const auto& a : argsArr) {
+        argList << a.toString();
+    }
+    const QString full = buildCommandText(task.value(QStringLiteral("kind")).toString(),
+                                          task.value(QStringLiteral("path")).toString(), argList);
     cmd_->setText(full);
     cmd_->setToolTip(full);
 

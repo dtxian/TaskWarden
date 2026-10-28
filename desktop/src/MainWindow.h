@@ -39,6 +39,9 @@ private slots:
     void onSnapshot();
     void tick1s();
     void selectTask(const QString& id);
+    void openAddDialog();
+    void openEditDialog(const QString& id);
+    void confirmDelete(const QString& id);
 
 private:
     void buildUi();
@@ -79,4 +82,5 @@ private:
 
     QElapsedTimer uptime_;
     bool quitting_ = false;
+    bool closePromptShown_ = false;
 };

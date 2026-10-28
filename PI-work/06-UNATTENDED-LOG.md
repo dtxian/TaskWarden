@@ -42,6 +42,20 @@
 
 （后续里程碑在此追加）
 
+## M5 · 表单与弹窗 ✅（约 0.4 天）
+
+**做了什么**
+- `TaskDialog`：添加/编辑表单（名称/类型/路径+浏览/参数多行+预览/工作目录/策略/优雅超时/健康检查/依赖 chips）；校验（名称/路径/参数/健康目标格式）；依赖成环禁用（forbidden 传递闭包）；返回 snake_case TaskConfig JSON。
+- `Args.h`：parseArgs（空格+引号+\" 转义，镜像 TS 与 Rust）+ kindFromExt + buildCommandText（三端镜像）；TaskCard 改用共享 buildCommandText。
+- `MainWindow`：工具栏「添加任务」；编辑/删除接线（删除二次确认 QMessageBox）；首次关闭询问（收起到托盘 / 退出）。
+
+**验证**
+- 构建通过；应用启动正常，单实例回归（进程数=1），空闲 CPU 0.23%。
+- 表单交互逻辑为 TS TaskModal 的逐行镜像（含 parseArgs 三端契约）。
+
+**遗留 / 下一步**
+- 无。进入 M6 打包与文档。
+
 ## M4 · 任务区 + 日志 + 4Hz ✅（约 0.6 天）
 
 **做了什么**

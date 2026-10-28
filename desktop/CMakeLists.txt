@@ -40,7 +40,10 @@ add_executable(taskwarden WIN32
     src/TrayController.h
     src/SingleInstance.cpp
     src/SingleInstance.h
+    src/TaskDialog.cpp
+    src/TaskDialog.h
     src/Format.h
+    src/Args.h
     resources/resources.qrc
 )
 target_link_libraries(taskwarden PRIVATE
