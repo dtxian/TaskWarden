@@ -42,6 +42,29 @@
 
 （后续里程碑在此追加）
 
+## M3 · Qt 外壳 ✅（约 0.4 天）
+
+**做了什么**
+- `EngineClient`：C ABI 包装 + QTimer 250ms 轮询 + QJsonDocument 解析；命令返回 0/-1/-2 透传；`notice` 信号。
+- `MainWindow`：工具栏（启动全部/停止全部）+ 状态栏（CPU/内存/GPU/运行数/运行时长）+ 关闭到托盘（closeEvent→hide）。
+- `TrayController`：QSystemTrayIcon（qrc 图标）+ 菜单（显示主窗口/退出程序）+ 单击恢复。
+- `SingleInstance`：QLocalServer/QLocalSocket。
+- `dark.qss` 深色主题；`/utf-8` 已生效（无 C4819 告警）。
+- 资源：app.ico + tray.png 入 qrc。
+
+**验证（实测）**
+- 二次启动：进程数仍为 1（第二实例退出） ✅
+- `CloseMainWindow()` 后：进程存活、`MainWindowHandle=0`（窗口隐藏收托盘） ✅
+- 空闲 CPU：**0.08%** ✅
+- 内存：**WS 132.9MB / Private 64.4MB**（稳定不增长）
+  - 引擎单独（mem_probe）：WS 29.8MB / Private 20.8MB；空 Qt 窗口（M0）：WS 37.9 / Private 7.4。
+  - 对比 Tauri 全进程树 330–365MB，单进程 ~133MB 已是显著下降。
+- 截图：无人值守环境 RDP 会话断开时 CopyFromScreen 报「句柄无效」，截图不可靠（M0 时可用），后续以 tasklist/PowerShell 实测为准。
+
+**遗留 / 下一步**
+- M4 验收「12 任务 + 200 行日志 WorkingSet ≤ 100MB」当前 133MB 可能超，需在 M4 实测并定位（疑似 NVML/样式表/Qt 开销）。
+- 进入 M4 任务区 + 日志 + 4Hz 治理。
+
 ## M2 · C ABI + 冒烟 ✅（约 0.3 天）
 
 **做了什么**

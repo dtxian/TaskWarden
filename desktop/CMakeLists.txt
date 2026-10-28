@@ -13,7 +13,7 @@ if(MSVC)
     add_compile_options(/utf-8)
 endif()
 
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Network)
 
 # ---- Rust 引擎静态库 ----
 # 原生系统库来自：cargo rustc --release -- --print native-static-libs
@@ -23,12 +23,21 @@ if(NOT RUST_LIB)
 endif()
 set(RUST_NATIVE_LIBS kernel32 ntdll userenv ws2_32 dbghelp)
 
-# ---- 主 GUI（M2 阶段仍为空窗口，M3 起接入引擎） ----
+# ---- 主 GUI ----
 add_executable(taskwarden WIN32
     src/main.cpp
+    src/EngineClient.cpp
+    src/EngineClient.h
+    src/MainWindow.cpp
+    src/MainWindow.h
+    src/TrayController.cpp
+    src/TrayController.h
+    src/SingleInstance.cpp
+    src/SingleInstance.h
+    resources/resources.qrc
 )
 target_link_libraries(taskwarden PRIVATE
-    Qt6::Core Qt6::Gui Qt6::Widgets
+    Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network
     ${RUST_LIB} ${RUST_NATIVE_LIBS}
 )
 

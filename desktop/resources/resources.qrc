@@ -1,0 +1,7 @@
+<RCC>
+  <qresource prefix="/">
+    <file>icons/tray.png</file>
+    <file>icons/app.ico</file>
+    <file>dark.qss</file>
+  </qresource>
+</RCC>

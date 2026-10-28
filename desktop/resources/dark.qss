@@ -1,0 +1,77 @@
+/* ------------------------------------------------------------------ */
+/* dark.qss：深色主题（橙色 accent + 状态色），与 Tauri 版 egui 风对齐    */
+/* 颜色令牌见 src/index.css：ink #0b0d0f / fog #c8d0d8 / rust #e8873a    */
+/* ok #4ade80 / err #f87171 / cyanx #22d3ee                              */
+/* ------------------------------------------------------------------ */
+
+QMainWindow, QDialog, QWidget {
+    background-color: #0b0d0f;
+    color: #c8d0d8;
+    font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+    font-size: 13px;
+}
+
+QToolBar {
+    background-color: #12161a;
+    border: none;
+    spacing: 6px;
+    padding: 6px;
+}
+
+QToolButton {
+    background-color: #1a2026;
+    color: #c8d0d8;
+    border: 1px solid #2a313a;
+    border-radius: 4px;
+    padding: 6px 12px;
+}
+
+QToolButton:hover {
+    border-color: #e8873a;
+    color: #ffffff;
+}
+
+QStatusBar {
+    background-color: #12161a;
+    color: #8a949e;
+    border-top: 1px solid #1c2228;
+}
+
+QStatusBar QLabel {
+    color: #8a949e;
+    padding: 0 8px;
+}
+
+QLabel {
+    color: #c8d0d8;
+}
+
+QMenu {
+    background-color: #151a1f;
+    color: #c8d0d8;
+    border: 1px solid #2a313a;
+}
+
+QMenu::item {
+    padding: 6px 24px;
+}
+
+QMenu::item:selected {
+    background-color: #e8873a;
+    color: #ffffff;
+}
+
+QScrollBar:vertical {
+    background: #0b0d0f;
+    width: 10px;
+}
+
+QScrollBar::handle:vertical {
+    background: #2a313a;
+    border-radius: 5px;
+    min-height: 30px;
+}
+
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+    height: 0;
+}
