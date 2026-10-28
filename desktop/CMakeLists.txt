@@ -30,10 +30,17 @@ add_executable(taskwarden WIN32
     src/EngineClient.h
     src/MainWindow.cpp
     src/MainWindow.h
+    src/TaskCard.cpp
+    src/TaskCard.h
+    src/LogPanel.cpp
+    src/LogPanel.h
+    src/Sparkline.cpp
+    src/Sparkline.h
     src/TrayController.cpp
     src/TrayController.h
     src/SingleInstance.cpp
     src/SingleInstance.h
+    src/Format.h
     resources/resources.qrc
 )
 target_link_libraries(taskwarden PRIVATE

@@ -1,15 +1,8 @@
 /* ------------------------------------------------------------------ */
-/* dark.qss：深色主题（橙色 accent + 状态色），与 Tauri 版 egui 风对齐    */
-/* 颜色令牌见 src/index.css：ink #0b0d0f / fog #c8d0d8 / rust #e8873a    */
-/* ok #4ade80 / err #f87171 / cyanx #22d3ee                              */
+/* dark.qss：深色主题的「有限控件」样式（菜单/滚动条/工具栏等）             */
+/* 全局背景/文字色改由 QPalette 提供（见 main.cpp），避免 QSS 通用          */
+/* QWidget 选择器对每个控件都启用样式表引擎带来的内存/绘制开销。           */
 /* ------------------------------------------------------------------ */
-
-QMainWindow, QDialog, QWidget {
-    background-color: #0b0d0f;
-    color: #c8d0d8;
-    font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
-    font-size: 13px;
-}
 
 QToolBar {
     background-color: #12161a;
@@ -42,10 +35,6 @@ QStatusBar QLabel {
     padding: 0 8px;
 }
 
-QLabel {
-    color: #c8d0d8;
-}
-
 QMenu {
     background-color: #151a1f;
     color: #c8d0d8;
@@ -72,6 +61,18 @@ QScrollBar::handle:vertical {
     min-height: 30px;
 }
 
-QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+QScrollBar:horizontal {
+    background: #0b0d0f;
+    height: 10px;
+}
+
+QScrollBar::handle:horizontal {
+    background: #2a313a;
+    border-radius: 5px;
+    min-width: 30px;
+}
+
+QScrollBar::add-line, QScrollBar::sub-line {
     height: 0;
+    width: 0;
 }
