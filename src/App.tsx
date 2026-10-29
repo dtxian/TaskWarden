@@ -45,7 +45,7 @@ function Nav() {
           className="ml-auto flex items-center gap-1.5 rounded-[7px] border border-[#FF7A29]/50 bg-[#FF7A29]/10 px-3 py-1.5 font-mono text-[10.5px] font-bold text-[#FF9557] transition-all hover:bg-[#FF7A29]/20 md:ml-3"
         >
           <span className="h-1.5 w-1.5 rounded-full bg-[#3ECF6E] pulse-dot" />
-          v0.1.0 · Qt 6 + Rust
+          v0.2.0 · Qt 6 + Rust
         </a>
       </div>
     </header>
