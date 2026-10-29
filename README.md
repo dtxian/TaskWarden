@@ -117,6 +117,10 @@ windeployqt --release --no-translations desktop/build/Release/taskwarden.exe
 
 产物：`desktop/build/Release/` 下的 `taskwarden.exe` + Qt DLL（整个文件夹拷走即用，单进程无 WebView2）。
 
+> 官方发布包（GitHub Releases）由 tag 触发 CI 自动构建：`Taskwarden-<tag>-win64.zip`
+> 内含 `taskwarden.exe` + Qt DLL + `THIRD_PARTY_NOTICES.md`。若目标机器缺 VC++ 运行库，
+> 包内附 `vc_redist.x64.exe`，双击安装后即可运行。
+
 ### 落地页 / 交互原型（浏览器）
 
 ```bash

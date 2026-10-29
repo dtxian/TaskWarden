@@ -86,7 +86,11 @@ jobs:
         run: |
           $stage = "pkg/$env:PKG_NAME-$env:TAG-win64"
           New-Item -ItemType Directory -Force -Path $stage | Out-Null
-          windeployqt --release --no-translations --dir $stage "desktop/build/taskwarden.exe"
+          # 纯 Widgets 应用：不需要软件 OpenGL 回退 / D3D·DXC 着色器编译器（实测可省 ~40MB）
+          # 保留 vc_redist.x64.exe：缺 VC++ 运行库的机器能就地安装（见 README）
+          windeployqt --release --no-translations --no-opengl-sw `
+            --no-system-d3d-compiler --no-system-dxc-compiler `
+            --dir $stage "desktop/build/taskwarden.exe"
           if ($LASTEXITCODE -ne 0) { throw "windeployqt 失败（exit=$LASTEXITCODE）" }
           Copy-Item "desktop/build/taskwarden.exe" $stage -Force
           Copy-Item "desktop/build/ffi_smoke.exe" $stage -Force
