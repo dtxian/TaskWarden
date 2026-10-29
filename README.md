@@ -65,6 +65,8 @@
 
 > 原 **Tauri 2 桌面版**已归档到 `legacy/tauri` 分支（`main` 不再包含 `src-tauri/`），需要时
 > `git switch legacy/tauri` 即可取回。
+>
+> 贡献者文档（分层/线程模型/C ABI/语义不变式/已知坑/决策记录）见 [`docs/`](docs/README.md)。
 
 依赖单向向下：**表示层（Qt/React）→ 核心调度（core）→ 进程运行时（runtime）→ 基础设施（infra）**；命令向下、事件向上。
 
