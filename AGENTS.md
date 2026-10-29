@@ -51,20 +51,13 @@ src/                     React 前端（WebView2 内渲染，落地页 + 原型�
 ├─ components/ui.tsx     内联 SVG 图标集 + Scramble/Reveal/CodeBlock/Sparkline
 └─ data/                 content.ts · snippets.ts（落地页文案与代码展示）
 
-src-tauri/               Rust 后端（Tauri 2，退路保留）
-├─ src/lib.rs            装配：plugin-log → dialog → single-instance → backend::init → 15 条命令注册
-├─ src/backend.rs        对接层：DTO 序列化 + snapshot/log-event/notice 推送 + 托盘 + #[tauri::command]
-├─ src/core/             supervisor.rs(1297行,状态机/引擎；指标 1s 采样) · scheduler.rs(DAG) · breaker.rs · health.rs · events.rs · error.rs
-├─ src/runtime/          process.rs(派生+泵读+解码) · job.rs(Job Object) · killer.rs(graceful/taskkill)
-├─ src/infra/            config.rs(TOML/便携/迁移) · logbuf.rs(Ring Buffer+落盘+3 天保留) · sysinfo.rs(CPU/Mem/NVML)
-├─ tauri.conf.json       bundle.active=false（只要单 exe）· decorations=false · devUrl=:1400
-├─ capabilities/default.json  窗口控制/对话框权限（自绘标题栏必需）
-└─ Cargo.toml            windows 0.62 · nvml-wrapper · tauri 2.11 · toml 1
+(原 Tauri 2 版 src-tauri/ 已归档到 legacy/tauri 分支；main 上不再包含)
 
-build/                   app-icon.svg / tray-icon.svg + gen-icon.mjs / gen-tray.mjs（sharp）
-deploy/                  本机(WSL)部署适配：serve.mjs · cross-build-win.mjs · Dockerfile.win · DEPLOY.md
-PI-work/                 ★ 方案工作区（调研/迁移方案/ADR/验证清单），见 PI-work/README.md
-.github/workflows/       ci.yml（frontend Linux + backend Windows）· deploy.yml（Pages）
+build/                   图标矢量源 app-icon.svg / tray-icon.svg + gen-icon.mjs / gen-tray.mjs
+                         （输出 desktop/resources/icons/{app.ico,tray.png}）
+scripts/                 env.sh（挂载/代理/工具路径）· build-all.sh（cargo+cmake）· screenshot.ps1
+PI-work/                 ★ 方案工作区（调研/迁移方案/ADR/验证清单/无人值守执行日志）
+.github/workflows/       ci.yml（frontend Linux + engine Windows）· deploy.yml（Pages）
 ```
 
 ---
@@ -79,16 +72,19 @@ npm test                 # vitest（当前 9 passed）
 npm run build            # vite build，base=/TaskWarden/（Pages）
 npm run build:web        # vite build --base=/（本地服务/Tauri 内嵌资源根）
 npm run serve            # node deploy/serve.mjs → http://0.0.0.0:1400/
-npm run icons            # gen-icon → tauri icon → gen-tray（需 devDep sharp）
+npm run icons            # 重新生成 desktop/resources/icons/{app.ico,tray.png}（需 devDep sharp）
 
-npm run tauri dev        # 桌面开发（需 Windows + Rust；内部会先跑 npm run dev）
-npm run tauri build      # → src-tauri/target/release/taskwarden.exe（无安装程序）
-cargo test --manifest-path src-tauri/Cargo.toml   # 24 个 Rust 测试，**仅 Windows 可跑**
-npm run build:win        # WSL/Linux 下用 Docker 交叉编译 Windows exe（见 §9）
+# ---- Qt 桌面版（main 主线）----
+source scripts/env.sh                                     # 挂载盘符 + 代理 + 工具路径
+"$CARGO" build --release --manifest-path engine/Cargo.toml # Rust 静态库
+"$CARGO" test  --manifest-path engine/Cargo.toml           # 26 个 Rust 测试（含 ping 解码 e2e）
+"$CMAKE" -S desktop -B desktop/build -G "Visual Studio 17 2022" -A x64 \
+         -DCMAKE_PREFIX_PATH="D:/ProgramFiles/Qt/6.9.3/msvc2022_64"
+"$CMAKE" --build desktop/build --config Release            # → desktop/build/Release/taskwarden.exe
 ```
 
-**当前 WSL 环境事实**：node v22、docker 可用；**无 cargo / Rust 工具链**，且 `src-tauri` 代码无条件用 Win32 API（无 `#[cfg(windows)]` 分支），因此本机不能原生编译或 `cargo test` Rust——验证 Rust 只能靠 `npm run build:win` 交叉编译或推 CI 的 `windows-latest`。
-`deploy/serve.mjs` 通常已后台常驻（`ps aux | grep serve.mjs`），日志 `/tmp/taskwarden-web.log`。
+**当前 WSL 环境事实**：node v22（WSL）+ Windows node v24 均可用；**Windows 侧 cargo/rustc 1.98(MSVC) + CMake 4.4 + Qt 6.9.3 + MSVC 2022** 经 `/mnt/c`、`/mnt/d` 互操作调用（见 `scripts/env.sh`）。
+WSL 的 automount 关闭，新会话先挂载 C/D/E。
 
 **Rust 改动前必读**：`cargo test` 的 `ping_pipe_decodes_without_mojibake` 会真的派生 `ping` 并断言无 U+FFFD——它是解码链路的 e2e 契约，别删。
 

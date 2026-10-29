@@ -12,7 +12,6 @@ build/*
 
 # 便携运行数据（exe 同级），绝不入库
 data/
-src-tauri/data/
 
 # Added by cargo
 
@@ -25,4 +24,3 @@ src-tauri/data/
 engine/target/
 desktop/build/
 desktop/out/
-_spike/

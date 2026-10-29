@@ -59,8 +59,12 @@
 │  └─ src/                   # ffi.rs（C ABI） + core/ runtime/ infra/（原样复用）
 │
 ├─ src/                      # Web 落地页 + 交互原型（浏览器 / GitHub Pages，React + Vite）
-└─ src-tauri/                # 旧 Tauri 2 桌面版（保留为退路，迁移验收前保持可构建）
+├─ build/                    # 图标矢量源（app-icon.svg / tray-icon.svg）+ 生成脚本
+└─ scripts/                  # env.sh / build-all.sh / screenshot.ps1
 ```
+
+> 原 **Tauri 2 桌面版**已归档到 `legacy/tauri` 分支（`main` 不再包含 `src-tauri/`），需要时
+> `git switch legacy/tauri` 即可取回。
 
 依赖单向向下：**表示层（Qt/React）→ 核心调度（core）→ 进程运行时（runtime）→ 基础设施（infra）**；命令向下、事件向上。
 
@@ -111,12 +115,14 @@ windeployqt --release --no-translations desktop/build/Release/taskwarden.exe
 
 产物：`desktop/build/Release/` 下的 `taskwarden.exe` + Qt DLL（整个文件夹拷走即用，单进程无 WebView2）。
 
-### 旧 Tauri 版（退路）
+### 落地页 / 交互原型（浏览器）
 
 ```bash
-npm install && npm run tauri build   # 单文件 exe（需 WebView2 运行时）
-npm run dev                          # 浏览器交互原型（mock 数据，端口 1400）
+npm ci && npm run dev      # 交互原型（mock 数据，端口 1400）
+npm run build              # 产出 dist/（GitHub Pages 用）
 ```
+
+> 旧 Tauri 2 桌面版见 `legacy/tauri` 分支。
 
 首次运行会在 `data\config.toml` 写入 5 个示例任务的种子配置。把任务路径改为本机真实存在的程序后点「启动」，
 即可真实拉起进程、绑定 Job Object、跑健康探针、崩溃自动重启 / 熔断。
@@ -128,12 +134,12 @@ npm run dev                          # 浏览器交互原型（mock 数据，端
 应用图标由矢量源生成（需 `npm i -D sharp`，已在 devDependencies）：
 
 ```bash
-node build/gen-icon.mjs          # build/app-icon.svg → 1024² PNG
-npx tauri icon build/app-icon.png # 生成 src-tauri/icons 全套（.ico/.png/.icns/…）
-node build/gen-tray.mjs          # build/tray-icon.svg → 撑满画布的托盘专用 PNG
+npm run icons      # = gen-icon.mjs + gen-tray.mjs
+#   build/app-icon.svg   → desktop/resources/icons/app.ico（256² PNG 负载）
+#   build/tray-icon.svg  → desktop/resources/icons/tray.png（64²，托盘/QIcon 用）
 ```
 
-改图标只需编辑 `build/*.svg` 后重跑上述命令并重新 `tauri build`。
+改图标只需编辑 `build/*.svg` → `npm run icons` → 重新构建桌面端（`.ico` 经 `app.rc` 嵌入 exe）。
 
 > 若资源管理器里 exe 图标看着是旧的，那是 Windows 图标缓存 —— 复制到其他路径或重启 explorer 即显示新图。
 
@@ -141,7 +147,7 @@ node build/gen-tray.mjs          # build/tray-icon.svg → 撑满画布的托盘
 
 ## 🌐 持续集成 / 部署
 
-- **CI**（`.github/workflows/ci.yml`）：`frontend`（Linux：typecheck + vitest）+ `backend`（Windows：`npm run build` 产出 dist 供 `generate_context!` 内嵌，再 `cargo test`）。
+- **CI**（`.github/workflows/ci.yml`）：`frontend`（Linux：typecheck + vitest）+ `engine`（Windows：`cargo test --manifest-path engine/Cargo.toml`）。
 - **Pages**（`.github/workflows/deploy.yml`）：纯浏览器交互原型部署到 GitHub Pages；
   `vite.config.js` 据 `TAURI_ENV_PLATFORM` 切换 `base`——桌面构建用 `/`（内嵌资源根路径），Pages 用 `/TaskWarden/`（子路径）。
 
