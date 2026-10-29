@@ -225,6 +225,14 @@ const RUST_RULES: [string, string][] = [
   ["[A-Za-z_][A-Za-z0-9_]*!", "tok-mac"],
 ];
 
+const CXX_RULES: [string, string][] = [
+  ["\\/\\/[^\\n]*", "tok-com"],
+  ["\"(?:[^\"\\\\\\n]|\\\\.)*\"", "tok-str"],
+  ["#[a-z]+[^\\n]*", "tok-com"],
+  ["\\b(class|struct|public|private|protected|explicit|override|virtual|const|constexpr|static|inline|namespace|using|auto|void|bool|int|return|if|else|for|while|new|delete|nullptr|true|false|emit|Q_OBJECT|QString|QByteArray|QJsonObject|QJsonArray|QJsonDocument|QTimer|QWidget|QFrame|QLabel)\\b", "tok-kw"],
+  ["\\b\\d[\\d_]*(?:\\.\\d+)?\\b", "tok-num"],
+];
+
 const TOML_RULES: [string, string][] = [
   ["#[^\\n]*", "tok-com"],
   ["\"(?:[^\"\\\\\\n]|\\\\.)*\"", "tok-str"],
@@ -253,8 +261,8 @@ function tokenizeLine(line: string, rules: [string, string][]): React.ReactNode[
   return out;
 }
 
-export function CodeBlock({ code, lang, className = "" }: { code: string; lang: "rust" | "toml"; className?: string }) {
-  const rules = lang === "rust" ? RUST_RULES : TOML_RULES;
+export function CodeBlock({ code, lang, className = "" }: { code: string; lang: "rust" | "toml" | "cpp"; className?: string }) {
+  const rules = lang === "rust" ? RUST_RULES : lang === "cpp" ? CXX_RULES : TOML_RULES;
   const lines = code.split("\n");
   return (
     <pre className={`font-mono text-[12.5px] leading-[1.75] overflow-x-auto ${className}`}>

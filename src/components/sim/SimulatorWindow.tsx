@@ -79,11 +79,11 @@ export default function SimulatorWindow({ sim, appMode }: { sim: Simulator; appM
             <span className="ml-auto flex items-center gap-1">
               <button
                 className="mr-1 hidden items-center gap-1 rounded-[5px] border border-[var(--eg-line)] px-2 py-[3px] font-mono text-[9.5px] text-[var(--eg-muted)] transition-colors hover:border-[#7AD4E8] hover:text-[#7AD4E8] md:flex"
-                title="模拟再次运行 TaskWarden.exe：单实例插件将拦截新进程并激活已有窗口"
+                title="模拟再次运行 taskwarden.exe：QLocalServer 单实例会拦截新进程并激活已有窗口"
                 onClick={() => {
                   sim.notify(
                     "info",
-                    "单实例拦截：tauri-plugin-single-instance 检测到二次启动 —— 新进程已退出，仅唤起已有主窗口",
+                    "单实例拦截：QLocalServer 检测到二次启动 —— 新进程已退出，仅唤起并聚焦已有主窗口",
                   );
                   setNudge(Date.now());
                 }}

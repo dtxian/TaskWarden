@@ -1,12 +1,12 @@
 /* ------------------------------------------------------------------ */
-/* 关键实现代码片段（Rust / TOML）——与右侧标签页一一对应                  */
+/* 关键实现代码片段（Rust / TOML / C++）——与右侧标签页一一对应                  */
 /* ------------------------------------------------------------------ */
 
 export interface Snippet {
   id: string;
   file: string;
   layer: string;
-  lang: "rust" | "toml";
+  lang: "rust" | "toml" | "cpp";
   title: string;
   note: string;
   code: string;
@@ -71,40 +71,55 @@ target = "ready"`,
     lang: "rust",
     title: "静默派生 · CREATE_NO_WINDOW",
     note: "按扩展名适配三种启动器，统一附加 CREATE_NO_WINDOW（0x0800_0000）标志；stdout/stderr 重定向为管道，喂给 Ring Buffer 与日志文件。",
-    code: `use std::io;
-use std::os::windows::process::CommandExt;
-use std::process::{Child, Command, Stdio};
+    code: `use std::os::windows::process::CommandExt;
+use std::process::{Command, Stdio};
 
-use crate::core::Task;
+use crate::infra::config::{Kind, TaskConfig};
 
 /// CREATE_NO_WINDOW —— 彻底杜绝控制台黑框
-const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+pub const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
-/// 按任务类型派生子进程：exe 直启 / bat 走 cmd /c / ps1 走 Bypass
-pub fn spawn_silent(task: &Task) -> io::Result<Child> {
-    let mut cmd = match task.kind.as_str() {
-        "exe" => Command::new(&task.path),
-        "bat" | "cmd" => {
+/// 按任务类型适配启动器；stdout/stderr 均接管道
+fn build_command(cfg: &TaskConfig) -> Command {
+    let path = expand_env(&cfg.path);          // 支持 %SystemRoot% 之类
+    match cfg.kind {
+        Kind::Exe => {
+            let mut c = Command::new(&path);
+            c.args(&cfg.args);
+            c
+        }
+        Kind::Bat => {
             let mut c = Command::new("cmd");
-            c.arg("/c").arg(&task.path);
+            c.arg("/c").arg(&path).args(&cfg.args);
             c
         }
-        "ps1" => {
+        Kind::Ps1 => {
             let mut c = Command::new("powershell");
-            c.args(["-ExecutionPolicy", "Bypass", "-File"])
-             .arg(&task.path);
+            c.args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"])
+             .arg(&path)
+             .args(&cfg.args);
             c
         }
-        other => return Err(io::Error::other(format!("未知类型: {other}"))),
-    };
+    }
+}
 
-    cmd.args(&task.args)
-        .current_dir(&task.cwd)
+/// 静默派生：失败返回人类可读错误（含 CreateProcessW 语义）
+pub fn spawn_task(cfg: &TaskConfig) -> Result<ProcessHandle, String> {
+    let mut cmd = build_command(cfg);
+    cmd.stdin(Stdio::null())
         .stdout(Stdio::piped())      // → Ring Buffer + logs/<name>.log
         .stderr(Stdio::piped())
         .creation_flags(CREATE_NO_WINDOW);
-
-    cmd.spawn()
+    if !cfg.cwd.is_empty() {
+        cmd.current_dir(&cfg.cwd);
+    }
+    let mut child = cmd.spawn().map_err(|e| format!("CreateProcessW 失败: {e}"))?;
+    let pid = child.id();
+    // stdout/stderr 各起一条线程按行泵读（详见 pump），
+    // 行边界天然安全：GBK 尾字节 >=0x40、UTF-8 续字节 >=0x80
+    let stdout = child.stdout.take().map(|st| { let (tx, rx) = channel(); std::thread::spawn(move || pump(st, tx)); rx });
+    let stderr = child.stderr.take().map(|st| { let (tx, rx) = channel(); std::thread::spawn(move || pump(st, tx)); rx });
+    Ok(ProcessHandle { child, pid, stdout, stderr })
 }`,
   },
   {
@@ -363,76 +378,88 @@ impl LogBuf {
 }`,
   },
   {
-    id: "main",
-    file: "lib.rs + backend.rs",
-    layer: "入口 / 托盘",
+    id: "ffi",
+    file: "engine/src/ffi.rs",
+    layer: "C ABI 边界",
     lang: "rust",
-    title: "Tauri 装配入口 + 托盘",
-    note: "Tauri 2 单实例插件拦截二次启动并唤起已有窗口；托盘 TrayIconBuilder 内嵌 tray-icon.png，菜单为「显示主窗口 / 退出程序」，退出先级联终结全部子进程再落盘配置。",
-    code: `/* ============ src-tauri/src/lib.rs —— Tauri 装配入口（节选） ============ */
-mod backend; mod core; mod infra; mod runtime;
+    title: "C ABI · 不阻塞 UI 的命令投递",
+    note: "Qt 与引擎之间只有 UTF-8 字符串与 JSON：不传结构体、不传回调。命令经有界队列 try_send（满返回 -2），每个入口 catch_unwind —— panic 绝不跨 FFI，因此 release 必须保留 panic = \"unwind\"。",
+    code: `use std::sync::mpsc::{SyncSender, TrySendError};
 
-use infra::config::Config;
-use tauri::Manager;
-
-pub fn run() {
-    // 诊断日志：stdout（开发）+ <exe 目录>\\data\\logs\\app.log（便携持久）
-    let app_log = tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Folder {
-        path: Config::data_dir().join("logs"),
-        file_name: Some("app".into()),
-    });
-    tauri::Builder::default()
-        .plugin(
-            tauri_plugin_log::Builder::default()
-                .level(log::LevelFilter::Info)
-                .targets([
-                    tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Stdout),
-                    app_log,
-                ])
-                .build(),
-        )
-        .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            // 二次启动：激活已有主窗口
-            if let Some(w) = app.get_webview_window("main") {
-                let _ = w.show();
-                let _ = w.set_focus();
-            }
-        }))
-        .setup(|app| { backend::init(app.handle())?; Ok(()) })
-        .invoke_handler(tauri::generate_handler![
-            backend::list_snapshot, backend::start, backend::stop, backend::restart,
-            backend::start_all, backend::stop_all, backend::crash, backend::reset_breaker,
-            backend::add_task, backend::update_task, backend::remove_task,
-            backend::set_fault_inject, backend::shutdown, backend::get_logs, backend::clear_logs,
-        ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+/// 有界命令队列：满 → -2，引擎未就绪 → -1，绝不阻塞 UI 线程
+fn send_cmd(e: &TwEngine, cmd: Command) -> i32 {
+    match e.cmd_tx.try_send(cmd) {
+        Ok(_) => 0,
+        Err(TrySendError::Full(_)) => { set_error(e, "命令队列已满"); -2 }
+        Err(TrySendError::Disconnected(_)) => { set_error(e, "守护引擎未就绪"); -1 }
+    }
 }
 
-/* ============ src-tauri/src/backend.rs —— 托盘构建（节选） ============ */
-use tauri::menu::{MenuBuilder, MenuItemBuilder};
-use tauri::tray::TrayIconBuilder;
+/// 入口护栏：panic → 写 last_error → 返回 -1（不让 panic 跨 FFI）
+unsafe fn guarded(e: *mut TwEngine, f: impl FnOnce(&TwEngine) -> i32) -> i32 {
+    if e.is_null() { return -1; }
+    let eng = &*e;
+    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| f(eng))) {
+        Ok(v) => v,
+        Err(p) => { set_error(eng, panic_msg(p)); -1 }
+    }
+}
 
-fn build_tray(app: &AppHandle) -> tauri::Result<()> {
-    let show = MenuItemBuilder::with_id("show", "显示主窗口").build(app)?;
-    let quit = MenuItemBuilder::with_id("quit", "退出程序").build(app)?;
-    let menu = MenuBuilder::new(app).items(&[&show, &quit]).build()?;
-    // 托盘专用图标（编译期内嵌）：无底板、图形撑满画布，16~24px 依然清晰
-    let tray_icon = tauri::image::Image::from_bytes(include_bytes!("../icons/tray-icon.png"))
-        .unwrap_or_else(|_| app.default_window_icon().cloned().expect("内嵌了默认窗口图标"));
-    TrayIconBuilder::new()
-        .icon(tray_icon)
-        .icon_as_template(false)
-        .menu(&menu)
-        .tooltip("TaskWarden · 轻量级后台任务守护监督器")
-        .on_menu_event(|app, ev| match ev.id().as_ref() {
-            "show" => { /* show + set_focus 主窗口 */ }
-            "quit" => app.exit(0),
-            _ => {}
-        })
-        .build(app)?;
-    Ok(())
+/// 出参 DTO 一律 camelCase，界面按同名字段直接读取
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskDto {
+    pub name: String,
+    pub state: String,
+    pub pid: Option<u32>,
+    pub restarts: u64,
+    pub probe_ms: Option<u128>,
+    pub backoff_until_ms: Option<u64>,
+    // …
+}`,
+  },
+  {
+    id: "engineclient",
+    file: "desktop/src/EngineClient.cpp",
+    layer: "表示层（Qt）",
+    lang: "cpp",
+    title: "Qt 侧 · 轮询快照（不跨线程回调）",
+    note: "Rust 线程不回调进 Qt：由主线程的 QTimer 主动拉快照，线程亲和性彻底划清。可见时 500ms、收进托盘后 2000ms，每次开销只是一次 JSON 解析。",
+    code: `EngineClient::EngineClient(const QString& dataDir, QObject* parent)
+    : QObject(parent)
+{
+    QByteArray dir = dataDir.toUtf8();
+    engine_ = tw_engine_new(dir.constData());   // C ABI：创建引擎
+    if (!engine_) return;
+
+    timer_ = new QTimer(this);
+    timer_->setInterval(500);                  // 可见态；托盘态调成 2000ms
+    connect(timer_, &QTimer::timeout, this, &EngineClient::poll);
+    timer_->start();
+}
+
+void EngineClient::poll()
+{
+    // 1) 快照：引擎序列化 → 主线程解析（跨线程数据只走字符串）
+    QString raw = takeString(tw_snapshot_json(engine_));
+    QJsonDocument doc = QJsonDocument::fromJson(raw.toUtf8());
+    if (doc.isObject()) snapshot_ = doc.object();
+
+    // 2) 通知：取走并清空（启动失败 / 熔断 / 意外退出）
+    QString nraw = takeString(tw_notices_json(engine_));
+    const QJsonArray arr = QJsonDocument::fromJson(nraw.toUtf8()).array();
+    for (const auto& v : arr) {
+        const QJsonObject o = v.toObject();
+        emit notice(o.value("kind").toString(), o.value("text").toString());
+    }
+
+    emit snapshotUpdated();                    // 界面按字段 diff 刷新
+}
+
+int EngineClient::start(const QString& id)
+{
+    QByteArray b = id.toUtf8();                // 只在调用期间持有
+    return tw_start(engine_, b.constData());   // 0 / -1 / -2 透传
 }`,
   },
 ];

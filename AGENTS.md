@@ -57,7 +57,7 @@ npm run icons                                             # 重生成 desktop/re
 ## 提交与文案纪律
 
 - 改行为 / 常量 / 命令数 / 路径 → **同一次提交**更新 `docs/architecture.md` 对应表格、`README.md`、文件顶部框线注释头。
-- 落地页 `src/data/content.ts` / `snippets.ts` 的每句宣称都要能在源码里指到实现（**当前已知滞后，见 `docs/architecture.md` §10.6**）。
+- 落地页 `src/data/content.ts` / `snippets.ts` 的每句宣称都要能在源码里指到实现（数字均来自实测，见 `docs/migration.md`）。
 - 纯逻辑拆成可单测函数，并用中文注释写清「在防哪个 bug」。
 - TS 与 Rust 的镜像实现/测试互为契约，改一端要检查另一端。
 - Commit message：`feat:/fix:/docs:/perf:/chore:` + 中文要点列表。

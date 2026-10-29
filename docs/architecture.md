@@ -156,16 +156,15 @@ npm run typecheck && npm test && npm run build
 3. **自依赖会 panic**：`topo_levels` 的 `indeg -= 1`。`direct_deps()` 过滤了自依赖，但 `dependents()` 没过滤——手改 `config.toml` 写出 `deps=["自身"]` 时 debug 构建整数下溢 panic（被 `catch_unwind` 吞掉，但会导致 `StartAll` 失效）。环依赖本身是安全的（残环追加末层，只以「不死锁」为契约）。
 4. **`FailAct::Ok` / `Decision::Ok` 实际不可达**；事件里只有「启动失败 / 熔断 / 意外退出」三类会进通知队列，**界面一律以快照为准**，别以为有事件驱动的增量更新。
 5. **`LICENSE` 是 Apache-2.0 全文，而 `Cargo.toml` 写 `license = "MIT"`、README 徽章写 MIT** —— 三者不一致，改许可前必须先跟作者确认（未决事项）。
-6. **`src/data/content.ts` 仍在描述 Tauri 架构**：落地页的模块树与 8 段代码片段是迁移前的产物，**与实际实现不一致**（待同步）。
-7. `content.ts` 写「React 19 + Vite」，实际 `package.json` 是 React 18.3.1。
-8. `scheduler.rs::direct_deps` 注释说「未知依赖忽略并告警」，**实际没有告警**（只 filter）。
+6. **`src/` 里仍保留 `isTauri` 分支与 `@tauri-apps/api`、`@tauri-apps/plugin-dialog` 依赖**：浏览器演示只走 mock 路径，该分支在 Qt 形态下**已不会激活**。彻底清理需要重构 `useSimulator.ts` 的 live 管线，属独立任务。
+7. `scheduler.rs::direct_deps` 注释说「未知依赖忽略并告警」，**实际没有告警**（只 filter）。
 
 ## 11. 一致性纪律
 
 改行为 / 常量 / 命令数 / 路径时，**同一次提交**内更新：
 
 - 本文档对应表格、`README.md`、相关文件的顶部框线注释头
-- 落地页 `src/data/content.ts`、`src/data/snippets.ts`（当前已滞后，见 §10.6）
+- 落地页 `src/data/content.ts`、`src/data/snippets.ts`（模块树、分层、性能数字、代码片段都与实现一一对应）
 - TS 与 Rust 的镜像实现与测试（DAG、熔断、`parseArgs`、种子 5 任务互为契约）
 
 纯逻辑一律拆成可单测的函数（`clean_exit_action`、`classify_stderr`、`topo_levels`、`Breaker`、`parse_url`、`format_time`/`civil_from_days`、`decode_line`、`parseArgs`），并用中文注释写清它在防哪个 bug。

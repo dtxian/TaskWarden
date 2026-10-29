@@ -31,7 +31,7 @@ export function CodeSection() {
       <SectionHead
         no="02 / 关键实现"
         title="把 Windows 的脏活，封装进干净的 Rust 抽象"
-        desc="以下代码片段对应需求文档中的每一项硬指标：静默派生、进程树终结、滑动窗口熔断、DAG 调度、环状日志与单实例托盘入口。核心引擎基于 std 与 windows-rs，无异步运行时；界面层为 Tauri IPC + React。"
+        desc="以下代码片段对应需求文档中的每一项硬指标：静默派生、进程树终结、滑动窗口熔断、DAG 调度、环状日志与单实例托盘入口。核心引擎基于 std 与 windows-rs，无异步运行时；界面层为 Qt 6 Widgets，经 C ABI 与引擎同进程通信。"
       />
 
       <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
@@ -63,7 +63,7 @@ export function CodeSection() {
               <span className="h-2.5 w-2.5 rounded-full bg-[#3ECF6E]/80" />
               <span className="ml-2 font-mono text-[11px] text-fog-300">{snip.file}</span>
               <span className="ml-2 rounded-[4px] bg-ink-700 px-1.5 py-px font-mono text-[9px] tracking-widest text-fog-500">
-                {snip.lang === "rust" ? "RUST" : "TOML"}
+                {snip.lang === "rust" ? "RUST" : snip.lang === "cpp" ? "C++" : "TOML"}
               </span>
               <button
                 onClick={copy}

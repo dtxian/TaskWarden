@@ -45,7 +45,7 @@ function Nav() {
           className="ml-auto flex items-center gap-1.5 rounded-[7px] border border-[#FF7A29]/50 bg-[#FF7A29]/10 px-3 py-1.5 font-mono text-[10.5px] font-bold text-[#FF9557] transition-all hover:bg-[#FF7A29]/20 md:ml-3"
         >
           <span className="h-1.5 w-1.5 rounded-full bg-[#3ECF6E] pulse-dot" />
-          v0.1.0 · Tauri 2 + React
+          v0.1.0 · Qt 6 + Rust
         </a>
       </div>
     </header>
@@ -89,7 +89,7 @@ function Footer() {
       </div>
       <div className="border-t border-ink-800">
         <div className="mx-auto flex max-w-[1200px] flex-wrap items-center gap-x-4 gap-y-2 px-5 py-4 font-mono text-[10.5px] text-fog-600">
-          <span>Rust · Tauri 2 · WebView2 · React · windows-rs · nvml-wrapper · serde/toml</span>
+          <span>Rust · Qt 6 Widgets · C++20 · windows-rs · nvml-wrapper · serde/toml</span>
           <span className="ml-auto">需求与设计文档 v1.0 · Windows 专用</span>
         </div>
       </div>
