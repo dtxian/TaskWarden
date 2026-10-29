@@ -1,0 +1,116 @@
+name: Release
+
+# 打 tag 即发布：git tag v0.2.0 && git push origin v0.2.0
+# 手动跑（只验证构建、默认不发布）：Actions → Release → Run workflow
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "手动测试用的包名后缀（默认用分支名；dry_run 时不发布）"
+        required: false
+      dry_run:
+        description: "只构建 + 上传 artifact，不创建 Release"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  QT_VERSION: "6.9.3"
+  PKG_NAME: TaskWarden
+
+jobs:
+  build-release:
+    name: 构建并发布（Windows）
+    runs-on: windows-latest
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+      DRY_RUN: ${{ inputs.dry_run || false }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: 缓存 Rust 构建
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: engine
+
+      - name: 安装 Qt ${{ env.QT_VERSION }}
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          arch: win64_msvc2022_64
+          cache: true
+
+      # 闸门 1：引擎语义契约（含 ping 解码 e2e）不绿就不出包
+      - name: 引擎测试
+        env:
+          CARGO_TERM_COLOR: always
+        run: cargo test --manifest-path engine/Cargo.toml
+
+      - name: 构建 Rust 静态库
+        run: cargo build --release --manifest-path engine/Cargo.toml
+
+      - name: 配置 CMake
+        run: cmake -S desktop -B desktop/build -G "Visual Studio 17 2022" -A x64 -DCMAKE_PREFIX_PATH="$env:QT_ROOT_DIR"
+
+      - name: 构建桌面端
+        run: cmake --build desktop/build --config Release
+
+      - name: 部署 Qt 运行时（动态链接，LGPL 义务）
+        run: windeployqt --release --no-translations "desktop/build/Release/taskwarden.exe"
+
+      # 闸门 2：C ABI 冒烟 —— 能建引擎、读 5 个种子任务、start→running→stop
+      - name: C ABI 冒烟
+        run: |
+          $dir = Join-Path $env:RUNNER_TEMP "tw-smoke"
+          & "desktop/build/Release/ffi_smoke.exe" $dir
+          if ($LASTEXITCODE -ne 0) { throw "ffi_smoke 失败（exit=$LASTEXITCODE）" }
+
+      - name: 组装发布包
+        run: |
+          $stage = "pkg/$env:PKG_NAME-$env:TAG-win64"
+          New-Item -ItemType Directory -Force -Path $stage | Out-Null
+          Copy-Item "desktop/build/Release/*" $stage -Recurse -Force
+          # 不发布运行期数据与调试符号
+          Remove-Item "$stage/data" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item "$stage/*.pdb" -Force -ErrorAction SilentlyContinue
+          Copy-Item THIRD_PARTY_NOTICES.md, README.md, LICENSE $stage
+          $zip = "$env:PKG_NAME-$env:TAG-win64.zip"
+          Compress-Archive -Path $stage -DestinationPath $zip -Force
+          "打包内容："
+          Get-ChildItem $stage | Sort-Object Name | ForEach-Object { "  {0,-28} {1,8:N0} B" -f $_.Name, $_.Length }
+          "zip 体积：{0:N1} MB" -f ((Get-Item $zip).Length / 1MB)
+
+      - name: 上传构建产物（保留 7 天，便于排查）
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.PKG_NAME }}-${{ env.TAG }}-win64
+          path: ${{ env.PKG_NAME }}-${{ env.TAG }}-win64.zip
+          retention-days: 7
+
+      - name: 创建 / 更新 Release
+        if: env.DRY_RUN != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $zip = "$env:PKG_NAME-$env:TAG-win64.zip"
+          gh release view $env:TAG --json tagName 2>$null | Out-Null
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "Release $env:TAG 已存在 → 覆盖上传附件"
+            gh release upload $env:TAG $zip --clobber
+          } else {
+            gh release create $env:TAG $zip `
+              --title "$env:PKG_NAME $env:TAG" `
+              --generate-notes
+          }
+          gh release view $env:TAG
