@@ -62,11 +62,17 @@ jobs:
       - name: 构建 Rust 静态库
         run: cargo build --release --manifest-path engine/Cargo.toml
 
+      # runner 上 CMake 的 VS 生成器探测不可靠 → 用 vcvars 注入 MSVC 环境 + Ninja
+      - name: 配置 MSVC 环境
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
       - name: 配置 CMake
-        run: cmake -S desktop -B desktop/build -G "Visual Studio 17 2022" -A x64 -DCMAKE_PREFIX_PATH="$env:QT_ROOT_DIR"
+        run: cmake -S desktop -B desktop/build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$env:QT_ROOT_DIR"
 
       - name: 构建桌面端
-        run: cmake --build desktop/build --config Release
+        run: cmake --build desktop/build
 
       - name: 部署 Qt 运行时（动态链接，LGPL 义务）
         run: windeployqt --release --no-translations "desktop/build/Release/taskwarden.exe"
