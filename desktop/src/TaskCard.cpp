@@ -5,6 +5,7 @@
 #include "TaskCard.h"
 
 #include "Args.h"
+#include "ElidedLabel.h"
 #include "Format.h"
 
 #include <QHBoxLayout>
@@ -91,6 +92,8 @@ TaskCard::TaskCard(const QString& id, QWidget* parent)
 void TaskCard::buildUi()
 {
     setObjectName(QStringLiteral("taskCard"));
+    // 水平方向填满网格列（列等分窗口时卡片随之拉伸）
+    setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     setStyleSheet(QStringLiteral(
         "QFrame#taskCard{background:#14191e;border:1px solid #2a313a;border-radius:8px;}"
         "QFrame#taskCard[selected=\"true\"]{border:1px solid #ff7a29;}"));
@@ -113,8 +116,9 @@ void TaskCard::buildUi()
     head->setSpacing(6);
     dot_ = new QLabel(this);
     dot_->setFixedSize(8, 8);
-    name_ = new QLabel(this);
+    name_ = new ElidedLabel(this);
     name_->setStyleSheet(QStringLiteral("font-family:Consolas,monospace;font-weight:bold;font-size:13px;color:#e6edf3;"));
+    name_->setMinimumWidth(60);
     badge_ = new QLabel(this);
     badge_->setStyleSheet(QStringLiteral("font-weight:600;font-size:10px;"));
     health_ = new QLabel(this);
@@ -131,7 +135,7 @@ void TaskCard::buildUi()
     cmdRow->setSpacing(6);
     kind_ = new QLabel(this);
     kind_->setStyleSheet(QStringLiteral("font-family:Consolas,monospace;font-weight:bold;font-size:10px;"));
-    cmd_ = new QLabel(this);
+    cmd_ = new ElidedLabel(this);
     cmd_->setStyleSheet(QStringLiteral("font-family:Consolas,monospace;font-size:11px;color:#8a949e;"));
     cmdRow->addWidget(kind_);
     cmdRow->addWidget(cmd_, 1);
@@ -234,7 +238,7 @@ void TaskCard::setTask(const QJsonObject& task, qint64 nowMs)
     colorBar_->setStyleSheet(QStringLiteral("background:%1;border-radius:2px;").arg(sm.color.name()));
     dot_->setStyleSheet(QStringLiteral("background:%1;border-radius:4px;").arg(sm.color.name()));
 
-    name_->setText(task.value(QStringLiteral("name")).toString());
+    name_->setFullText(task.value(QStringLiteral("name")).toString());
     badge_->setStyleSheet(chipStyle(sm.color) + QStringLiteral("font-weight:600;"));
     kind_->setStyleSheet(chipStyle(km.color) + QStringLiteral("font-family:Consolas,monospace;font-weight:bold;font-size:10px;"));
     kind_->setText(km.label);
@@ -247,8 +251,7 @@ void TaskCard::setTask(const QJsonObject& task, qint64 nowMs)
     }
     const QString full = buildCommandText(task.value(QStringLiteral("kind")).toString(),
                                           task.value(QStringLiteral("path")).toString(), argList);
-    cmd_->setText(full);
-    cmd_->setToolTip(full);
+    cmd_->setFullText(full);
 
     pid_->setText(QStringLiteral("PID %1").arg(task.value(QStringLiteral("pid")).toVariant().isNull()
                                                    ? QStringLiteral("—")

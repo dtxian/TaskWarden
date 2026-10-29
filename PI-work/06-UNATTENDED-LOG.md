@@ -165,3 +165,23 @@
 
 **遗留 / 下一步**
 - 无。进入 M2 C ABI + 冒烟。
+
+---
+
+## 第二轮 · UI 反馈修复（7 项）
+
+| # | 问题 | 修复 |
+|---|---|---|
+| 1 | 「任务名称」「类型」不在同一行对齐 | `TaskDialog` 用 `QGridLayout`（标签行/输入行/错误行三行对齐，列拉伸 3:1） |
+| 2 | 卡片列宽不等等分、窄窗口不换行 | 网格按实际列数 `setColumnStretch(i,1)` 均分；卡片 `Expanding` + 文本省略（`ElidedLabel` 横向 Ignored），窄于 700px 降 1 列 |
+| 3 | EXE 无图标 | 新增 `resources/app.rc` 嵌入 `app.ico`；实测 `ExtractIconEx` = 1（此前 0） |
+| 4 | 最小化不回托盘 | `changeEvent` 捕获 `WindowStateChange`+`isMinimized()` → `hideToTray()` |
+| 5 | 日志无限增长 | `logbuf::prune_log_files`：启动 + 每小时，删除 3 天未更新文件、按行时间戳剔除过期行（含孤儿日志） |
+| 6 | CPU/内存/GPU 刷新过频 | 引擎指标采样 4Hz → **1s**（`METRICS_EVERY_TICKS=4`）；Qt 轮询 250ms → **500ms**（托盘态 2s）；仅值变化时刷新控件 |
+| 7 | 托盘态仍占用资源 | `hideToTray()`：释放全部任务卡/日志控件 + `SetProcessWorkingSetSize` 修剪工作集；恢复时按快照重建 |
+
+**实测**
+- 可见态：WS 138.8MB / Priv 69MB，空闲 CPU **0.047%**（此前 0.13–0.23%）
+- 最小化后：MainWindowHandle=0（已收托盘）、进程存活、**WS 9.2MB**
+- 二次启动恢复：窗口回来、进程数仍为 1
+- 日志保留：`[2020-…]` 行被剔除、`[2099-…]` 保留（Rust 单测 26/26，新增 3 个 prune 测试）

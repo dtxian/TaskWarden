@@ -30,9 +30,16 @@ EngineClient::EngineClient(const QString& dataDir, QObject* parent)
         return;
     }
     timer_ = new QTimer(this);
-    timer_->setInterval(250);
+    timer_->setInterval(500);
     connect(timer_, &QTimer::timeout, this, &EngineClient::poll);
     timer_->start();
+}
+
+void EngineClient::setPollInterval(int ms)
+{
+    if (timer_ && ms > 0 && timer_->interval() != ms) {
+        timer_->setInterval(ms);
+    }
 }
 
 EngineClient::~EngineClient()

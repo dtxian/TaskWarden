@@ -31,9 +31,14 @@ public:
 public slots:
     void showAndRaise();
 
+signals:
+    /// 已收进托盘（供外层弹出托盘气泡提示）
+    void hiddenToTray();
+
 protected:
     void closeEvent(QCloseEvent* e) override;
     void resizeEvent(QResizeEvent* e) override;
+    void changeEvent(QEvent* e) override;
 
 private slots:
     void onSnapshot();
@@ -51,6 +56,12 @@ private:
     void pollSelectedLogs();
     void relayoutCards();
     int desiredColumns() const;
+
+    /// 收进托盘：释放界面控件 + 放慢轮询 + 修剪工作集
+    void hideToTray();
+    void releaseUi();
+    void restoreUi();
+    static void trimWorkingSet();
 
     EngineClient* engine_ = nullptr;
 
@@ -83,4 +94,9 @@ private:
     QElapsedTimer uptime_;
     bool quitting_ = false;
     bool closePromptShown_ = false;
+    bool suppressStateChange_ = false;
+    QVector<float> lastHist_;
+    double lastCpu_ = -1.0;
+    double lastMem_ = -1.0;
+    double lastGpu_ = -1.0;
 };

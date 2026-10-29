@@ -29,6 +29,11 @@ use crate::runtime::process::{spawn_task, ProcessHandle};
 const TICK: Duration = Duration::from_millis(250);
 /// 健康重探周期（tick 数，250ms/tick → 5s）
 const PROBE_EVERY_TICKS: u32 = 20;
+/// 指标采样周期（tick 数，250ms/tick → 4 tick = 1s）：CPU/内存/GPU 采样较贵，
+/// 无需跟 4Hz 状态机同频，降频可显著降低空闲 CPU。
+const METRICS_EVERY_TICKS: u32 = 4;
+/// 日志清理周期（tick 数，250ms/tick → 14400 tick = 1 小时）
+const LOG_PRUNE_EVERY_TICKS: u32 = 14400;
 /// 就绪等待超时
 const READY_TIMEOUT: Duration = Duration::from_secs(10);
 /// 单次 tcp/http 探针超时
@@ -325,6 +330,8 @@ impl Supervisor {
         let window = Duration::from_secs(cfg.settings.breaker_window_sec.max(1));
         let max = cfg.settings.breaker_max_fails.max(1);
         let log_root = Config::resolve_log_dir(&cfg.settings.log_dir);
+        // 启动即清理过期日志（保留最近 LOG_RETENTION_DAYS 天）
+        logbuf::prune_log_files(&log_root, logbuf::LOG_RETENTION_DAYS);
         let tasks = cfg
             .tasks
             .iter()
@@ -1003,9 +1010,10 @@ impl Supervisor {
             self.handle_exit(&name, code);
         }
 
-        // 指标采样（4Hz）→ 共享状态
-        let s = self.sampler.sample();
-        {
+        // 指标采样：按 METRICS_EVERY_TICKS 节拍（默认 1s）采样，避免每 250ms tick 都跑
+        // GetSystemTimes / GlobalMemoryStatusEx / NVML 造成无谓的空闲 CPU 开销。
+        if self.tick % METRICS_EVERY_TICKS == 0 {
+            let s = self.sampler.sample();
             let mut st = self.state.lock().unwrap_or_else(|e| e.into_inner());
             st.cpu = s.cpu_pct;
             st.mem = s.mem_pct;
@@ -1023,6 +1031,11 @@ impl Supervisor {
                 st.gpu_hist.pop_front();
             }
             st.gpu_hist.push_back(s.gpu_pct.unwrap_or(0.0));
+        }
+
+        // 每小时清理一次过期日志文件（兜底：已删除任务 / 长期未写的任务）
+        if self.tick % LOG_PRUNE_EVERY_TICKS == 0 {
+            logbuf::prune_log_files(&self.log_root, logbuf::LOG_RETENTION_DAYS);
         }
     }
 

@@ -33,3 +33,12 @@ TrayController::TrayController(MainWindow* win, EngineClient* engine, QObject* p
 
     tray_->show();
 }
+
+void TrayController::notifyOnce(const QString& title, const QString& msg)
+{
+    if (notified_ || !tray_) {
+        return;
+    }
+    notified_ = true;
+    tray_->showMessage(title, msg, QSystemTrayIcon::Information, 3000);
+}

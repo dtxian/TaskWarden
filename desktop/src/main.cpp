@@ -66,6 +66,10 @@ int main(int argc, char** argv)
     MainWindow win(&engine);
     TrayController tray(&win, &engine);
     QObject::connect(&si, &SingleInstance::showRequested, &win, &MainWindow::showAndRaise);
+    QObject::connect(&win, &MainWindow::hiddenToTray, &tray, [&tray] {
+        tray.notifyOnce(QStringLiteral("TaskWarden"),
+                        QStringLiteral("已收起到系统托盘，任务继续在后台守护。点击托盘图标可恢复窗口。"));
+    });
 
     // 测试钩子：--autostart 启动后自动「启动全部」（验收/压测用）
     if (app.arguments().contains(QStringLiteral("--autostart"))) {

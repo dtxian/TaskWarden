@@ -13,6 +13,7 @@ class QLabel;
 class QPushButton;
 class QToolButton;
 class QVBoxLayout;
+class ElidedLabel;
 
 class TaskCard : public QFrame {
     Q_OBJECT
@@ -55,11 +56,11 @@ private:
 
     QWidget* colorBar_ = nullptr;
     QLabel* dot_ = nullptr;
-    QLabel* name_ = nullptr;
+    ElidedLabel* name_ = nullptr;
     QLabel* badge_ = nullptr;
     QLabel* health_ = nullptr;
     QLabel* kind_ = nullptr;
-    QLabel* cmd_ = nullptr;
+    ElidedLabel* cmd_ = nullptr;
     QLabel* pid_ = nullptr;
     QLabel* uptime_ = nullptr;
     QLabel* restarts_ = nullptr;

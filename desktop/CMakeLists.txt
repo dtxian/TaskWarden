@@ -44,7 +44,9 @@ add_executable(taskwarden WIN32
     src/TaskDialog.h
     src/Format.h
     src/Args.h
+    src/ElidedLabel.h
     resources/resources.qrc
+    resources/app.rc
 )
 target_link_libraries(taskwarden PRIVATE
     Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network

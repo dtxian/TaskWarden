@@ -8,6 +8,7 @@
 
 #include <QComboBox>
 #include <QFileDialog>
+#include <QGridLayout>
 #include <QHBoxLayout>
 #include <QJsonArray>
 #include <QLabel>
@@ -91,9 +92,10 @@ void TaskDialog::buildUi()
         l->setStyleSheet(labelStyle);
     };
 
-    // 名称 + 类型
-    auto* row1 = new QHBoxLayout();
-    auto* nameBox = new QVBoxLayout();
+    // 名称 + 类型（同一行：标签对齐、输入框对齐、错误行单独占位）
+    auto* row1 = new QGridLayout();
+    row1->setHorizontalSpacing(10);
+    row1->setVerticalSpacing(4);
     QLabel* nameLbl;
     section(nameLbl, QStringLiteral("任务名称"));
     name_ = new QLineEdit();
@@ -101,25 +103,25 @@ void TaskDialog::buildUi()
     name_->setPlaceholderText(QStringLiteral("ollama-serve"));
     nameErr_ = new QLabel();
     nameErr_->setStyleSheet(errStyle);
-    nameBox->addWidget(nameLbl);
-    nameBox->addWidget(name_);
-    nameBox->addWidget(nameErr_);
-    auto* kindBox = new QVBoxLayout();
+    nameErr_->hide();
     QLabel* kindLbl;
     section(kindLbl, QStringLiteral("类型"));
     kind_ = new QComboBox();
     kind_->setStyleSheet(inputStyle);
+    kind_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     kind_->addItem(QStringLiteral("exe 直启"), QStringLiteral("exe"));
     kind_->addItem(QStringLiteral("bat · cmd /c"), QStringLiteral("bat"));
     kind_->addItem(QStringLiteral("ps1 · Bypass"), QStringLiteral("ps1"));
-    kindBox->addWidget(kindLbl);
-    kindBox->addWidget(kind_);
-    row1->addLayout(nameBox, 3);
-    row1->addLayout(kindBox, 1);
+    row1->addWidget(nameLbl, 0, 0);
+    row1->addWidget(kindLbl, 0, 1);
+    row1->addWidget(name_, 1, 0);
+    row1->addWidget(kind_, 1, 1);
+    row1->addWidget(nameErr_, 2, 0);
+    row1->setColumnStretch(0, 3);
+    row1->setColumnStretch(1, 1);
     root->addLayout(row1);
 
     // 路径 + 浏览
-    section(pathErr_, QString()); // 占位错误行单独
     QLabel* pathLbl;
     section(pathLbl, QStringLiteral("程序路径"));
     auto* pathRow = new QHBoxLayout();

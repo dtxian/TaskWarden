@@ -8,8 +8,14 @@ use std::fs::OpenOptions;
 use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 pub const LOG_CAP: usize = 200;
+/// 日志保留天数：启动/每小时清理时，删除最后修改早于该天数的日志，并剔除文件中
+/// 时间戳早于该天数的行（“日志只保留最近 3 天”）。
+pub const LOG_RETENTION_DAYS: u64 = 3;
+/// 单文件超过该大小时直接清空（避免极端情况下读入/重写超大文件）
+const PRUNE_SIZE_LIMIT: u64 = 32 * 1024 * 1024;
 /// 文件日志惰性刷盘窗口：INFO 行最多 500ms 落一次盘（高频输出下省 IO），
 /// ERR/WARN 与环溢出立即刷，进程退出（Drop）兜底刷
 const FLUSH_INTERVAL_MS: u64 = 500;
@@ -66,6 +72,8 @@ impl LogBuf {
         if let Some(parent) = self.file_path.parent() {
             let _ = std::fs::create_dir_all(parent);
         }
+        // 挂载即按保留期剔除过期行（仅保留最近 LOG_RETENTION_DAYS 天）
+        prune_file_content(&self.file_path, LOG_RETENTION_DAYS);
         self.file = OpenOptions::new()
             .create(true)
             .append(true)
@@ -136,6 +144,77 @@ pub fn push_shared(log: &SharedLog, t_ms: u64, level: &'static str, msg: impl In
     }
 }
 
+/* ---------------- 日志保留期（最近 N 天） ---------------- */
+
+/// 日志保留期处理（启动时 + 每小时）：
+/// 1) 删除最后修改早于 `retention_days` 天的 `*.log`；
+/// 2) 其余 `*.log` 按行时间戳剔除过期行（含已删任务的孤儿日志）。
+pub fn prune_log_files(dir: &Path, retention_days: u64) {
+    let Some(cutoff) = SystemTime::now().checked_sub(Duration::from_secs(retention_days.saturating_mul(86_400))) else {
+        return;
+    };
+    let Ok(entries) = std::fs::read_dir(dir) else { return };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        let is_log = path
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(|e| e.eq_ignore_ascii_case("log"))
+            .unwrap_or(false);
+        if !is_log {
+            continue;
+        }
+        if let Ok(modified) = entry.metadata().and_then(|m| m.modified()) {
+            if modified < cutoff {
+                let _ = std::fs::remove_file(&path);
+                continue;
+            }
+        }
+        prune_file_content(&path, retention_days);
+    }
+}
+
+/// 仅保留文件中时间戳不早于 `retention_days` 天的行（行首形如 `[YYYY-MM-DD HH:MM:SS]`）。
+/// 超大文件直接清空；无法读取则不动。
+fn prune_file_content(path: &Path, retention_days: u64) {
+    let Ok(meta) = std::fs::metadata(path) else { return };
+    if meta.len() == 0 {
+        return;
+    }
+    if meta.len() > PRUNE_SIZE_LIMIT {
+        let _ = std::fs::write(path, b"");
+        return;
+    }
+    let Ok(content) = std::fs::read_to_string(path) else { return };
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0);
+    let cutoff_full = format_time(now.saturating_sub(retention_days.saturating_mul(86_400_000)));
+    let cutoff_date = &cutoff_full[..10.min(cutoff_full.len())];
+
+    let mut kept = String::with_capacity(content.len());
+    for line in content.lines() {
+        let keep = match line.get(1..11) {
+            Some(date) if line.starts_with('[') => date >= cutoff_date,
+            _ => true,
+        };
+        if keep {
+            kept.push_str(line);
+            kept.push('\n');
+        }
+    }
+    if kept.len() != content.len() {
+        let tmp = path.with_extension("log.tmp");
+        if std::fs::write(&tmp, kept).is_ok() && std::fs::rename(&tmp, path).is_err() {
+            let _ = std::fs::remove_file(&tmp);
+        }
+    }
+}
+
 /* ---------------- 时间格式化（纯 std，UTC） ---------------- */
 
 /// 由 unix 毫秒格式化 "YYYY-MM-DD HH:MM:SS"（UTC）
@@ -202,6 +281,37 @@ mod tests {
         c.attach_file(&dir);
         assert_eq!(c.file_path.file_name().unwrap().to_str().unwrap(), "bad___name.log");
 
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn prune_file_content_keeps_only_recent_days() {
+        let dir = std::env::temp_dir().join(format!("taskwarden-prune-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let p = dir.join("t.log");
+        std::fs::write(
+            &p,
+            "[2020-01-01 00:00:00] INFO   old line\n[2099-01-01 00:00:00] INFO   new line\nno-timestamp kept\n",
+        )
+        .unwrap();
+        prune_file_content(&p, LOG_RETENTION_DAYS);
+        let c = std::fs::read_to_string(&p).unwrap();
+        assert!(!c.contains("old line"), "过期行应被剔除：{c}");
+        assert!(c.contains("new line"), "未来/近期行应保留：{c}");
+        assert!(c.contains("no-timestamp kept"), "无时间戳行保守保留");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn prune_log_files_prunes_content_of_non_config_tasks() {
+        // 已删任务（不在 config 中）的孤儿日志也应按行时间戳清理
+        let dir = std::env::temp_dir().join(format!("taskwarden-prunefiles2-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("orphan.log"), "[2020-01-01 00:00:00] INFO   ancient\n[2099-01-01 00:00:00] INFO   fresh\n").unwrap();
+        prune_log_files(&dir, LOG_RETENTION_DAYS);
+        let c = std::fs::read_to_string(dir.join("orphan.log")).unwrap();
+        assert!(!c.contains("ancient"));
+        assert!(c.contains("fresh"));
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

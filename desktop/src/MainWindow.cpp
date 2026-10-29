@@ -16,6 +16,7 @@
 #include <QCloseEvent>
 #include <QColor>
 #include <QDateTime>
+#include <QEvent>
 #include <QGridLayout>
 #include <QHBoxLayout>
 #include <QJsonObject>
@@ -34,6 +35,13 @@
 
 #include <algorithm>
 #include <utility>
+
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
 
 MainWindow::MainWindow(EngineClient* engine, QWidget* parent)
     : QMainWindow(parent)
@@ -74,7 +82,7 @@ MainWindow::MainWindow(EngineClient* engine, QWidget* parent)
     auto* splitter = new QSplitter(Qt::Vertical, central);
     taskScroll_ = new QScrollArea(splitter);
     taskScroll_->setWidgetResizable(true);
-    taskScroll_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    taskScroll_->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     taskContainer_ = new QWidget();
     grid_ = new QGridLayout(taskContainer_);
     grid_->setContentsMargins(12, 12, 12, 12);
@@ -200,7 +208,79 @@ void MainWindow::closeEvent(QCloseEvent* e)
         }
     }
     e->ignore();
+    hideToTray();
+}
+
+void MainWindow::changeEvent(QEvent* e)
+{
+    QMainWindow::changeEvent(e);
+    if (e->type() != QEvent::WindowStateChange || suppressStateChange_) {
+        return;
+    }
+    // 「最小化」也收进托盘（而非留在任务栏的最小化窗口）
+    if (isMinimized()) {
+        suppressStateChange_ = true;
+        QTimer::singleShot(0, this, [this] {
+            hideToTray();
+            suppressStateChange_ = false;
+        });
+    }
+}
+
+void MainWindow::hideToTray()
+{
+    if (!isVisible()) {
+        return;
+    }
+    releaseUi();
     hide();
+    setWindowState(Qt::WindowNoState); // 清掉最小化标志，下次 show 直接正常显示
+    if (engine_) {
+        engine_->setPollInterval(2000); // 托盘态放慢轮询
+    }
+    trimWorkingSet();
+    emit hiddenToTray();
+}
+
+void MainWindow::releaseUi()
+{
+    // 释放任务卡与日志控件（托盘态只保留最小壳，真正减少资源占用）
+    for (TaskCard* c : std::as_const(cards_)) {
+        grid_->removeWidget(c);
+        c->hide();
+        c->deleteLater();
+    }
+    cards_.clear();
+    orderedCards_.clear();
+    currentCols_ = 0;
+    logPanel_->setTask(QString());
+    logPanel_->setLines(QJsonArray());
+    lastHist_.clear();
+    lastCpu_ = lastMem_ = lastGpu_ = -1.0;
+}
+
+void MainWindow::restoreUi()
+{
+    if (engine_) {
+        engine_->setPollInterval(500);
+    }
+    // 重新按最新快照重建卡片与日志
+    syncCards(engine_->snapshot().value(QStringLiteral("tasks")).toArray());
+    for (TaskCard* c : std::as_const(cards_)) {
+        c->setSelected(c->id() == selectedId_);
+    }
+    if (!selectedId_.isEmpty()) {
+        logPanel_->setTask(selectedId_);
+        pollSelectedLogs();
+    }
+}
+
+void MainWindow::trimWorkingSet()
+{
+#ifdef _WIN32
+    // 通知系统修剪本进程工作集（托盘态把闲置页面交还系统）
+    SetProcessWorkingSetSize(GetCurrentProcess(), static_cast<SIZE_T>(-1), static_cast<SIZE_T>(-1));
+#endif
 }
 
 void MainWindow::resizeEvent(QResizeEvent* e)
@@ -211,6 +291,8 @@ void MainWindow::resizeEvent(QResizeEvent* e)
 
 void MainWindow::showAndRaise()
 {
+    setWindowState(Qt::WindowNoState);
+    restoreUi();
     show();
     raise();
     activateWindow();
@@ -225,19 +307,37 @@ void MainWindow::requestQuit()
 
 void MainWindow::onSnapshot()
 {
+    // 托盘态不重建 UI（卡片已在 hideToTray 释放），进一步省资源
+    if (!isVisible()) {
+        return;
+    }
     const QJsonObject s = engine_->snapshot();
 
-    // 资源栏
-    cpuValue_->setText(QStringLiteral("%1%").arg(s.value(QStringLiteral("cpu")).toDouble(), 0, 'f', 0));
-    memValue_->setText(QStringLiteral("%1%").arg(s.value(QStringLiteral("mem")).toDouble(), 0, 'f', 0));
+    // 资源栏（CPU/内存/GPU 采样已降为 1s，这里仅在值变化时刷新控件）
+    const double cpu = s.value(QStringLiteral("cpu")).toDouble();
+    const double mem = s.value(QStringLiteral("mem")).toDouble();
     const double gpu = s.value(QStringLiteral("gpu")).toDouble();
-    gpuValue_->setText(gpu > 0.0 ? QStringLiteral("%1%").arg(gpu, 0, 'f', 0) : QStringLiteral("N/A"));
+    if (!qFuzzyCompare(cpu + 1.0, lastCpu_ + 1.0)) {
+        cpuValue_->setText(QStringLiteral("%1%").arg(cpu, 0, 'f', 0));
+        lastCpu_ = cpu;
+    }
+    if (!qFuzzyCompare(mem + 1.0, lastMem_ + 1.0)) {
+        memValue_->setText(QStringLiteral("%1%").arg(mem, 0, 'f', 0));
+        lastMem_ = mem;
+    }
+    if (!qFuzzyCompare(gpu + 1.0, lastGpu_ + 1.0)) {
+        gpuValue_->setText(gpu > 0.0 ? QStringLiteral("%1%").arg(gpu, 0, 'f', 0) : QStringLiteral("N/A"));
+        lastGpu_ = gpu;
+    }
     {
         QVector<float> hist;
         const QJsonArray a = s.value(QStringLiteral("cpuHist")).toArray();
         hist.reserve(a.size());
         for (const auto& v : a) hist.append(static_cast<float>(v.toDouble()));
-        cpuSpark_->setValues(hist);
+        if (hist != lastHist_) {
+            cpuSpark_->setValues(hist);
+            lastHist_ = hist;
+        }
     }
 
     // 任务计数
@@ -269,12 +369,21 @@ void MainWindow::onSnapshot()
     // 任务卡 diff
     syncCards(tasks);
 
+    // 默认选中首个任务（尊重用户已有选择）
+    if (selectedId_.isEmpty() && !orderedCards_.isEmpty()) {
+        selectTask(orderedCards_.first()->id());
+        return;
+    }
+
     // 选中任务日志
     pollSelectedLogs();
 }
 
 void MainWindow::tick1s()
 {
+    if (!isVisible()) {
+        return; // 托盘态不刷新界面
+    }
     const qint64 now = QDateTime::currentMSecsSinceEpoch();
     for (TaskCard* c : std::as_const(cards_)) {
         c->tick(now);
@@ -419,6 +528,11 @@ void MainWindow::relayoutCards()
         delete grid_->takeAt(0);
     }
 
+    // 列等分窗口：重排前先清空所有列拉伸，再按实际列数均分
+    for (int i = 0; i < 8; ++i) {
+        grid_->setColumnStretch(i, 0);
+        grid_->setRowStretch(i, 0);
+    }
     int row = 0;
     int col = 0;
     for (TaskCard* c : orderedCards_) {
@@ -428,13 +542,17 @@ void MainWindow::relayoutCards()
             ++row;
         }
     }
+    for (int i = 0; i < cols; ++i) {
+        grid_->setColumnStretch(i, 1);
+    }
     grid_->setRowStretch(row + 1, 1);
 }
 
 int MainWindow::desiredColumns() const
 {
+    // 卡片按最小可读宽度 ~340px 换行：宽则 3 列等分，窄则逐级降为 2/1 列
     const int w = taskScroll_->viewport()->width();
-    if (w < 640) return 1;
-    if (w < 1000) return 2;
+    if (w < 700) return 1;
+    if (w < 1060) return 2;
     return 3;
 }

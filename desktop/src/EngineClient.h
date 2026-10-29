@@ -25,6 +25,9 @@ public:
     QJsonObject snapshot() const { return snapshot_; }
     QJsonArray logs(const QString& id, int limit) const;
 
+    /// 调节轮询节拍（ms）：窗口可见时较快，收进托盘时放慢以省资源。
+    void setPollInterval(int ms);
+
     int start(const QString& id);
     int stop(const QString& id);
     int restart(const QString& id);

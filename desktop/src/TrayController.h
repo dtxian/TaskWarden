@@ -16,7 +16,11 @@ class TrayController : public QObject {
 public:
     explicit TrayController(MainWindow* win, EngineClient* engine, QObject* parent = nullptr);
 
+    /// 托盘气泡提示（首次收进托盘时提示一次）
+    void notifyOnce(const QString& title, const QString& msg);
+
 private:
     QSystemTrayIcon* tray_ = nullptr;
     QMenu* menu_ = nullptr;
+    bool notified_ = false;
 };

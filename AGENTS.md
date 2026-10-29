@@ -54,9 +54,9 @@ src/                     React 前端（WebView2 内渲染，落地页 + 原型�
 src-tauri/               Rust 后端（Tauri 2，退路保留）
 ├─ src/lib.rs            装配：plugin-log → dialog → single-instance → backend::init → 15 条命令注册
 ├─ src/backend.rs        对接层：DTO 序列化 + snapshot/log-event/notice 推送 + 托盘 + #[tauri::command]
-├─ src/core/             supervisor.rs(1297行,状态机/引擎) · scheduler.rs(DAG) · breaker.rs · health.rs · events.rs · error.rs
+├─ src/core/             supervisor.rs(1297行,状态机/引擎；指标 1s 采样) · scheduler.rs(DAG) · breaker.rs · health.rs · events.rs · error.rs
 ├─ src/runtime/          process.rs(派生+泵读+解码) · job.rs(Job Object) · killer.rs(graceful/taskkill)
-├─ src/infra/            config.rs(TOML/便携/迁移) · logbuf.rs(Ring Buffer+落盘) · sysinfo.rs(CPU/Mem/NVML)
+├─ src/infra/            config.rs(TOML/便携/迁移) · logbuf.rs(Ring Buffer+落盘+3 天保留) · sysinfo.rs(CPU/Mem/NVML)
 ├─ tauri.conf.json       bundle.active=false（只要单 exe）· decorations=false · devUrl=:1400
 ├─ capabilities/default.json  窗口控制/对话框权限（自绘标题栏必需）
 └─ Cargo.toml            windows 0.62 · nvml-wrapper · tauri 2.11 · toml 1
