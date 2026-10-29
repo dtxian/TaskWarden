@@ -59,7 +59,7 @@ QPushButton* makeBtn(const QString& text, const QColor& c, QWidget* parent)
     auto* b = new QPushButton(text, parent);
     b->setCursor(Qt::PointingHandCursor);
     b->setStyleSheet(
-        QStringLiteral("QPushButton{background:transparent;color:%1;border:1px solid rgba(%2,%3,%4,0.4);border-radius:4px;padding:3px 9px;font-size:11px;}"
+        QStringLiteral("QPushButton{background:transparent;color:%1;border:1px solid rgba(%2,%3,%4,0.4);border-radius:5px;padding:3px 9px;font-size:12px;}"
                        "QPushButton:hover{background:rgba(%2,%3,%4,0.12);}"
                        "QPushButton:disabled{color:#4a5560;border-color:#2a313a;}")
             .arg(c.name())
@@ -75,7 +75,7 @@ QToolButton* makeIconBtn(const QString& text, QWidget* parent)
     b->setText(text);
     b->setCursor(Qt::PointingHandCursor);
     b->setStyleSheet(QStringLiteral(
-        "QToolButton{background:transparent;color:#8a949e;border:1px solid #2a313a;border-radius:4px;padding:2px 7px;font-size:11px;}"
+        "QToolButton{background:transparent;color:#8a949e;border:1px solid #2a313a;border-radius:5px;padding:3px 9px;font-size:12px;}"
         "QToolButton:hover{color:#c8d0d8;border-color:#4a5560;}"));
     return b;
 }
@@ -107,47 +107,50 @@ void TaskCard::buildUi()
     root->addWidget(colorBar_);
 
     auto* body = new QVBoxLayout();
-    body->setContentsMargins(10, 9, 10, 9);
-    body->setSpacing(5);
+    body->setContentsMargins(12, 10, 12, 10);
+    body->setSpacing(7);
     root->addLayout(body);
 
-    // 头部
+    // 头部：名称吃剩余宽度（省略），徽章/健康度固定宽度，绝不会压字
     auto* head = new QHBoxLayout();
-    head->setSpacing(6);
+    head->setSpacing(8);
     dot_ = new QLabel(this);
-    dot_->setFixedSize(8, 8);
+    dot_->setFixedSize(9, 9);
+    dot_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     name_ = new ElidedLabel(this);
-    name_->setStyleSheet(QStringLiteral("font-family:Consolas,monospace;font-weight:bold;font-size:13px;color:#e6edf3;"));
-    name_->setMinimumWidth(60);
+    name_->setStyleSheet(QStringLiteral("font-family:Consolas,monospace;font-weight:bold;font-size:15px;color:#e6edf3;"));
+    name_->setMinimumWidth(48);
     badge_ = new QLabel(this);
-    badge_->setStyleSheet(QStringLiteral("font-weight:600;font-size:10px;"));
+    badge_->setStyleSheet(QStringLiteral("font-weight:600;font-size:12px;"));
+    badge_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     health_ = new QLabel(this);
-    health_->setStyleSheet(QStringLiteral("font-family:Consolas,monospace;font-size:10px;color:#8a949e;"));
+    health_->setStyleSheet(QStringLiteral("font-family:Consolas,monospace;font-size:11.5px;color:#8a949e;"));
+    health_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     head->addWidget(dot_);
-    head->addWidget(name_);
+    head->addWidget(name_, 1);
     head->addWidget(badge_);
-    head->addStretch(1);
     head->addWidget(health_);
     body->addLayout(head);
 
     // 类型 + 命令行
     auto* cmdRow = new QHBoxLayout();
-    cmdRow->setSpacing(6);
+    cmdRow->setSpacing(8);
     kind_ = new QLabel(this);
-    kind_->setStyleSheet(QStringLiteral("font-family:Consolas,monospace;font-weight:bold;font-size:10px;"));
+    kind_->setStyleSheet(QStringLiteral("font-family:Consolas,monospace;font-weight:bold;font-size:11px;"));
+    kind_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     cmd_ = new ElidedLabel(this);
-    cmd_->setStyleSheet(QStringLiteral("font-family:Consolas,monospace;font-size:11px;color:#8a949e;"));
+    cmd_->setStyleSheet(QStringLiteral("font-family:Consolas,monospace;font-size:12px;color:#8a949e;"));
     cmdRow->addWidget(kind_);
     cmdRow->addWidget(cmd_, 1);
     body->addLayout(cmdRow);
 
     // 运行信息
     auto* info = new QHBoxLayout();
-    info->setSpacing(12);
+    info->setSpacing(14);
     pid_ = new QLabel(this);
     uptime_ = new QLabel(this);
     restarts_ = new QLabel(this);
-    const QString mono = QStringLiteral("font-family:Consolas,monospace;font-size:10px;color:#8a949e;");
+    const QString mono = QStringLiteral("font-family:Consolas,monospace;font-size:12px;color:#8a949e;");
     pid_->setStyleSheet(mono);
     uptime_->setStyleSheet(mono);
     restarts_->setStyleSheet(mono);
@@ -168,7 +171,7 @@ void TaskCard::buildUi()
     error_->setWordWrap(true);
     error_->setStyleSheet(QStringLiteral(
         "color:#ff7b70;border:1px solid rgba(240,86,74,0.35);background:rgba(240,86,74,0.08);"
-        "border-radius:4px;padding:4px 6px;font-size:10px;"));
+        "border-radius:5px;padding:5px 8px;font-size:12px;"));
     error_->hide();
     body->addWidget(error_);
 
@@ -176,7 +179,7 @@ void TaskCard::buildUi()
     depsRow_ = new QWidget(this);
     depsLayout_ = new QVBoxLayout(depsRow_);
     depsLayout_->setContentsMargins(0, 0, 0, 0);
-    depsLayout_->setSpacing(3);
+    depsLayout_->setSpacing(4);
     depsRow_->hide();
     body->addWidget(depsRow_);
 
@@ -239,8 +242,8 @@ void TaskCard::setTask(const QJsonObject& task, qint64 nowMs)
     dot_->setStyleSheet(QStringLiteral("background:%1;border-radius:4px;").arg(sm.color.name()));
 
     name_->setFullText(task.value(QStringLiteral("name")).toString());
-    badge_->setStyleSheet(chipStyle(sm.color) + QStringLiteral("font-weight:600;"));
-    kind_->setStyleSheet(chipStyle(km.color) + QStringLiteral("font-family:Consolas,monospace;font-weight:bold;font-size:10px;"));
+    badge_->setStyleSheet(chipStyle(sm.color) + QStringLiteral("font-weight:600;font-size:12px;"));
+    kind_->setStyleSheet(chipStyle(km.color) + QStringLiteral("font-family:Consolas,monospace;font-weight:bold;font-size:11px;"));
     kind_->setText(km.label);
 
     // 命令行（省略过长）
@@ -287,7 +290,7 @@ void TaskCard::setTask(const QJsonObject& task, qint64 nowMs)
         for (const auto& d : deps) {
             auto* chip = new QLabel(QStringLiteral("← %1").arg(d.toString()), depsRow_);
             chip->setStyleSheet(QStringLiteral(
-                "color:#8a949e;border:1px solid #2a313a;background:#0f1418;border-radius:3px;padding:0 5px;font-family:Consolas,monospace;font-size:10px;"));
+                "color:#8a949e;border:1px solid #2a313a;background:#0f1418;border-radius:4px;padding:1px 6px;font-family:Consolas,monospace;font-size:11px;"));
             depsLayout_->addWidget(chip);
         }
         depsRow_->show();
@@ -337,16 +340,16 @@ void TaskCard::updateTimers(qint64 nowMs)
     if (state_ == QStringLiteral("running")) {
         if (!probeMs.isNull()) {
             health_->setText(QStringLiteral("● 健康 %1ms").arg(probeMs.toInt()));
-            health_->setStyleSheet(QStringLiteral("font-family:Consolas,monospace;font-size:10px;color:#3ecf6e;"));
+            health_->setStyleSheet(QStringLiteral("font-family:Consolas,monospace;font-size:11.5px;color:#3ecf6e;"));
         } else {
             health_->setText(QStringLiteral("● 探测中"));
-            health_->setStyleSheet(QStringLiteral("font-family:Consolas,monospace;font-size:10px;color:#f5b84b;"));
+            health_->setStyleSheet(QStringLiteral("font-family:Consolas,monospace;font-size:11.5px;color:#f5b84b;"));
         }
     } else if (state_ == QStringLiteral("starting")) {
         health_->setText(QStringLiteral("● 探测中"));
-        health_->setStyleSheet(QStringLiteral("font-family:Consolas,monospace;font-size:10px;color:#f5b84b;"));
+        health_->setStyleSheet(QStringLiteral("font-family:Consolas,monospace;font-size:11.5px;color:#f5b84b;"));
     } else {
         health_->setText(QStringLiteral("✕ 离线"));
-        health_->setStyleSheet(QStringLiteral("font-family:Consolas,monospace;font-size:10px;color:#6c7887;"));
+        health_->setStyleSheet(QStringLiteral("font-family:Consolas,monospace;font-size:11.5px;color:#6c7887;"));
     }
 }

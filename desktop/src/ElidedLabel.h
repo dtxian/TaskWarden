@@ -1,6 +1,6 @@
 /* ------------------------------------------------------------------ */
 /* ElidedLabel：按可用宽度省略显示的 QLabel                              */
-/* 用于任务卡名称/命令行——长文本不再撑宽卡片，保证网格列等分窗口           */
+/* 用于任务卡名称/命令行——长文本不再撑宽卡片，也不会压到旁边的徽章         */
 /* ------------------------------------------------------------------ */
 
 #pragma once
@@ -14,8 +14,8 @@ public:
     explicit ElidedLabel(QWidget* parent = nullptr)
         : QLabel(parent)
     {
-        // 横向忽略 sizeHint：卡片宽度由网格决定，而非文本长度
-        setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+        // 水平方向可伸展：sizeHint 很小 → 布局把剩余空间给它，省略号按实际宽度计算
+        setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
         setMinimumWidth(0);
     }
 
@@ -28,6 +28,11 @@ public:
 
     QString fullText() const { return full_; }
 
+    QSize sizeHint() const override
+    {
+        return QSize(60, QLabel::sizeHint().height());
+    }
+
 protected:
     void resizeEvent(QResizeEvent* e) override
     {
@@ -37,8 +42,8 @@ protected:
 
     QSize minimumSizeHint() const override
     {
-        // 最小宽度不随文本增长，避免把单元格撑宽
-        return QSize(0, QLabel::minimumSizeHint().height());
+        // 最小宽度不随文本增长，避免把单元格/相邻控件挤走
+        return QSize(24, QLabel::minimumSizeHint().height());
     }
 
 private:

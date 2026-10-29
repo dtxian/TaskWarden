@@ -41,7 +41,7 @@ int main(int argc, char** argv)
     pal.setColor(QPalette::ToolTipText, QColor(0xc8, 0xd0, 0xd8));
     pal.setColor(QPalette::PlaceholderText, QColor(0x6c, 0x78, 0x87));
     app.setPalette(pal);
-    app.setFont(QFont(QStringLiteral("Segoe UI"), 9));
+    app.setFont(QFont(QStringLiteral("Segoe UI"), 10));
 
     QFile qss(QStringLiteral(":/dark.qss"));
     if (qss.open(QIODevice::ReadOnly | QIODevice::Text)) {

@@ -23,11 +23,11 @@ namespace {
 
 const QString inputStyle = QStringLiteral(
     "QLineEdit,QPlainTextEdit,QComboBox,QSpinBox{background:#0f1418;color:#c8d0d8;border:1px solid #2a313a;"
-    "border-radius:5px;padding:5px 8px;font-family:Consolas,monospace;font-size:12px;}"
+    "border-radius:6px;padding:6px 9px;font-family:Consolas,monospace;font-size:13.5px;}"
     "QLineEdit:focus,QPlainTextEdit:focus,QComboBox:focus,QSpinBox:focus{border-color:#ff7a29;}");
 
-const QString labelStyle = QStringLiteral("color:#8a949e;font-size:11px;font-weight:600;");
-const QString errStyle = QStringLiteral("color:#ff7b70;font-size:10px;");
+const QString labelStyle = QStringLiteral("color:#8a949e;font-size:12.5px;font-weight:600;");
+const QString errStyle = QStringLiteral("color:#ff7b70;font-size:11.5px;");
 
 QString joinArgsForEdit(const QJsonArray& args)
 {
@@ -73,7 +73,7 @@ TaskDialog::TaskDialog(const QJsonObject* initial, const QJsonArray& allTasks, Q
     }
     setWindowTitle(initial ? QStringLiteral("编辑任务 · %1").arg(initial_.value(QStringLiteral("name")).toString())
                            : QStringLiteral("添加任务"));
-    setMinimumWidth(620);
+    setMinimumWidth(680);
     setStyleSheet(QStringLiteral("QDialog{background:#14191e;}"));
 
     buildUi();
@@ -130,7 +130,7 @@ void TaskDialog::buildUi()
     path_->setPlaceholderText(QStringLiteral("C:\\tools\\app.exe"));
     auto* browse = new QPushButton(QStringLiteral("浏览…"));
     browse->setStyleSheet(QStringLiteral(
-        "QPushButton{background:#1a2026;color:#c8d0d8;border:1px solid #2a313a;border-radius:5px;padding:5px 12px;}"
+        "QPushButton{background:#1a2026;color:#c8d0d8;border:1px solid #2a313a;border-radius:6px;padding:6px 13px;font-size:12.5px;}"
         "QPushButton:hover{border-color:#ff7a29;color:#ff9557;}"));
     pathRow->addWidget(path_, 1);
     pathRow->addWidget(browse);
@@ -148,7 +148,7 @@ void TaskDialog::buildUi()
     args_->setMinimumHeight(72);
     args_->setPlaceholderText(QStringLiteral("--port 8080\n--log-dir \"C:\\logs my app\"\n--workers 4"));
     argsPreview_ = new QLabel();
-    argsPreview_->setStyleSheet(QStringLiteral("color:#7ad4e8;font-family:Consolas,monospace;font-size:10px;"));
+    argsPreview_->setStyleSheet(QStringLiteral("color:#7ad4e8;font-family:Consolas,monospace;font-size:12px;"));
     argsPreview_->setWordWrap(true);
     argsErr_ = new QLabel();
     argsErr_->setStyleSheet(errStyle);
@@ -239,7 +239,7 @@ void TaskDialog::buildUi()
     cmdPreview_->setWordWrap(true);
     cmdPreview_->setStyleSheet(QStringLiteral(
         "color:#ff9557;border:1px solid rgba(255,122,41,0.3);background:rgba(255,122,41,0.06);"
-        "border-radius:6px;padding:8px;font-family:Consolas,monospace;font-size:11px;"));
+        "border-radius:7px;padding:9px;font-family:Consolas,monospace;font-size:12.5px;"));
     root->addWidget(cmdPreview_);
 
     // 按钮
@@ -247,11 +247,11 @@ void TaskDialog::buildUi()
     btns->addStretch(1);
     auto* cancel = new QPushButton(QStringLiteral("取消"));
     cancel->setStyleSheet(QStringLiteral(
-        "QPushButton{background:transparent;color:#8a949e;border:1px solid #2a313a;border-radius:5px;padding:6px 16px;}"
+        "QPushButton{background:transparent;color:#8a949e;border:1px solid #2a313a;border-radius:6px;padding:7px 18px;font-size:12.5px;}"
         "QPushButton:hover{color:#c8d0d8;}"));
     auto* ok = new QPushButton(initial_.isEmpty() ? QStringLiteral("创建任务") : QStringLiteral("保存配置"));
     ok->setStyleSheet(QStringLiteral(
-        "QPushButton{background:#ff7a29;color:#1a0d04;border:none;border-radius:5px;padding:6px 16px;font-weight:bold;}"
+        "QPushButton{background:#ff7a29;color:#1a0d04;border:none;border-radius:6px;padding:7px 18px;font-size:12.5px;font-weight:bold;}"
         "QPushButton:hover{background:#ff9557;}"));
     btns->addWidget(cancel);
     btns->addWidget(ok);
@@ -447,7 +447,7 @@ void TaskDialog::rebuildDeps()
         chip->setToolTip(blocked ? QStringLiteral("会形成依赖环，已禁用") : QString());
         chip->setText((on ? QStringLiteral("✓ ") : QString()) + tn);
         chip->setStyleSheet(QStringLiteral(
-            "QPushButton{background:transparent;color:%1;border:1px solid %2;border-radius:4px;padding:3px 9px;font-family:Consolas,monospace;font-size:11px;}"
+            "QPushButton{background:transparent;color:%1;border:1px solid %2;border-radius:5px;padding:4px 10px;font-family:Consolas,monospace;font-size:12px;}"
             "QPushButton:hover{border-color:#ff9557;}"
             "QPushButton:checked{background:rgba(255,122,41,0.14);border-color:#ff7a29;color:#ff9557;}"
             "QPushButton:disabled{color:#3a4148;border-color:#1c2228;}")
@@ -467,7 +467,7 @@ void TaskDialog::rebuildDeps()
         depsLayout_->addLayout(flow);
     } else {
         auto* empty = new QLabel(QStringLiteral("暂无其他任务"), depsContainer_);
-        empty->setStyleSheet(QStringLiteral("color:#8a949e;font-size:11px;"));
+        empty->setStyleSheet(QStringLiteral("color:#8a949e;font-size:12px;"));
         depsLayout_->addWidget(empty);
     }
 }

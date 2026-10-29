@@ -102,9 +102,9 @@ MainWindow::MainWindow(EngineClient* engine, QWidget* parent)
     configPathLabel_ = new QLabel(this);
     statsLabel_ = new QLabel(this);
     lastErrorLabel_ = new QLabel(this);
-    configPathLabel_->setStyleSheet(QStringLiteral("font-family:Consolas,monospace;font-size:10px;color:#8a949e;"));
-    statsLabel_->setStyleSheet(QStringLiteral("font-family:Consolas,monospace;font-size:10px;color:#8a949e;"));
-    lastErrorLabel_->setStyleSheet(QStringLiteral("font-family:Consolas,monospace;font-size:10px;color:#8a949e;"));
+    configPathLabel_->setStyleSheet(QStringLiteral("font-family:Consolas,monospace;font-size:11.5px;color:#8a949e;"));
+    statsLabel_->setStyleSheet(QStringLiteral("font-family:Consolas,monospace;font-size:11.5px;color:#8a949e;"));
+    lastErrorLabel_->setStyleSheet(QStringLiteral("font-family:Consolas,monospace;font-size:11.5px;color:#8a949e;"));
     statusBar()->addWidget(configPathLabel_);
     statusBar()->addWidget(statsLabel_);
     statusBar()->addWidget(lastErrorLabel_, 1);
@@ -143,10 +143,10 @@ void MainWindow::buildResourceBar(QWidget* parent)
     lay->setContentsMargins(12, 6, 12, 6);
     lay->setSpacing(14);
 
-    const QString nameStyle = QStringLiteral("color:#8a949e;font-size:11px;");
+    const QString nameStyle = QStringLiteral("color:#8a949e;font-size:12.5px;");
     auto makeValue = [](const QColor& c) {
         auto* v = new QLabel(QStringLiteral("--"));
-        v->setStyleSheet(QStringLiteral("font-family:Consolas,monospace;font-size:12px;font-weight:bold;color:%1;").arg(c.name()));
+        v->setStyleSheet(QStringLiteral("font-family:Consolas,monospace;font-size:14.5px;font-weight:bold;color:%1;").arg(c.name()));
         return v;
     };
 
@@ -156,7 +156,7 @@ void MainWindow::buildResourceBar(QWidget* parent)
     cpuValue_ = makeValue(QColor(0xff, 0x95, 0x57));
     cpuSpark_ = new Sparkline(bar);
     cpuSpark_->setColor(QColor(0xff, 0x95, 0x57));
-    cpuSpark_->setFixedSize(90, 20);
+    cpuSpark_->setFixedSize(104, 24);
     lay->addWidget(cpuName);
     lay->addWidget(cpuValue_);
     lay->addWidget(cpuSpark_);
@@ -177,9 +177,9 @@ void MainWindow::buildResourceBar(QWidget* parent)
 
     lay->addStretch(1);
     uptimeLabel_ = new QLabel(QStringLiteral("运行 00:00:00"), bar);
-    uptimeLabel_->setStyleSheet(QStringLiteral("font-family:Consolas,monospace;font-size:10px;color:#8a949e;"));
+    uptimeLabel_->setStyleSheet(QStringLiteral("font-family:Consolas,monospace;font-size:12px;color:#8a949e;"));
     taskCountLabel_ = new QLabel(QStringLiteral("任务 0/0"), bar);
-    taskCountLabel_->setStyleSheet(QStringLiteral("font-family:Consolas,monospace;font-size:10px;color:#8a949e;"));
+    taskCountLabel_->setStyleSheet(QStringLiteral("font-family:Consolas,monospace;font-size:12px;color:#8a949e;"));
     lay->addWidget(uptimeLabel_);
     lay->addWidget(taskCountLabel_);
 }
@@ -363,8 +363,8 @@ void MainWindow::onSnapshot()
                                  ? QStringLiteral("✓ 无异常")
                                  : QStringLiteral("上次错误：%1").arg(lastErr));
     lastErrorLabel_->setStyleSheet(lastErr.isEmpty()
-                                       ? QStringLiteral("font-family:Consolas,monospace;font-size:10px;color:#3ecf6e;")
-                                       : QStringLiteral("font-family:Consolas,monospace;font-size:10px;color:#ff7b70;"));
+                                       ? QStringLiteral("font-family:Consolas,monospace;font-size:11.5px;color:#3ecf6e;")
+                                       : QStringLiteral("font-family:Consolas,monospace;font-size:11.5px;color:#ff7b70;"));
 
     // 任务卡 diff
     syncCards(tasks);
@@ -550,9 +550,9 @@ void MainWindow::relayoutCards()
 
 int MainWindow::desiredColumns() const
 {
-    // 卡片按最小可读宽度 ~340px 换行：宽则 3 列等分，窄则逐级降为 2/1 列
+    // 卡片实测最小宽 377px（margin 12 + 列间距 12）：宽则 3 列等分，窄则逐级降为 2/1 列
     const int w = taskScroll_->viewport()->width();
-    if (w < 700) return 1;
-    if (w < 1060) return 2;
+    if (w < 800) return 1;
+    if (w < 1200) return 2;
     return 3;
 }

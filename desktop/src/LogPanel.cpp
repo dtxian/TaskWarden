@@ -37,22 +37,22 @@ LogPanel::LogPanel(QWidget* parent)
 
     // 头部
     auto* head = new QHBoxLayout();
-    head->setContentsMargins(10, 6, 10, 6);
+    head->setContentsMargins(12, 8, 12, 8);
     head->setSpacing(8);
 
     title_ = new QLabel(QStringLiteral("实时日志"), this);
-    title_->setStyleSheet(QStringLiteral("font-weight:bold;font-size:12px;color:#ff9557;"));
+    title_->setStyleSheet(QStringLiteral("font-weight:bold;font-size:13.5px;color:#ff9557;"));
     taskBadge_ = new QLabel(this);
     taskBadge_->setStyleSheet(QStringLiteral(
         "color:#ff9557;border:1px solid rgba(255,122,41,0.4);background:rgba(255,122,41,0.1);"
-        "border-radius:3px;padding:0 5px;font-family:Consolas,monospace;font-size:10px;font-weight:600;"));
+        "border-radius:4px;padding:1px 6px;font-family:Consolas,monospace;font-size:12px;font-weight:600;"));
     pathLabel_ = new QLabel(this);
-    pathLabel_->setStyleSheet(QStringLiteral("font-family:Consolas,monospace;font-size:10px;color:#8a949e;"));
+    pathLabel_->setStyleSheet(QStringLiteral("font-family:Consolas,monospace;font-size:11.5px;color:#8a949e;"));
     ringLabel_ = new QLabel(this);
-    ringLabel_->setStyleSheet(QStringLiteral("font-family:Consolas,monospace;font-size:10px;color:#8a949e;"));
+    ringLabel_->setStyleSheet(QStringLiteral("font-family:Consolas,monospace;font-size:11.5px;color:#8a949e;"));
 
     const QString smallBtnStyle = QStringLiteral(
-        "QPushButton{background:transparent;color:#8a949e;border:1px solid #2a313a;border-radius:4px;padding:2px 8px;font-size:10px;}"
+        "QPushButton{background:transparent;color:#8a949e;border:1px solid #2a313a;border-radius:5px;padding:3px 10px;font-size:12px;}"
         "QPushButton:hover{color:#c8d0d8;border-color:#4a5560;}"
         "QPushButton:disabled{color:#3a4148;border-color:#1c2228;}");
 
@@ -80,7 +80,7 @@ LogPanel::LogPanel(QWidget* parent)
     editor_ = new QTextEdit(this);
     editor_->setReadOnly(true);
     editor_->setStyleSheet(QStringLiteral(
-        "QTextEdit{background:#0f1418;border:none;color:#c8d0d8;font-family:Consolas,monospace;font-size:11px;padding:6px 8px;}"));
+        "QTextEdit{background:#0f1418;border:none;color:#c8d0d8;font-family:Consolas,monospace;font-size:12.5px;padding:8px 10px;}"));
     root->addWidget(editor_, 1);
 
     setTask(QString());
@@ -113,7 +113,7 @@ void LogPanel::setTask(const QString& taskId)
         taskBadge_->hide();
         pathLabel_->clear();
         editor_->setHtml(QStringLiteral(
-            "<div style=\"color:#6c7887;font-family:Consolas,monospace;font-size:11px;\">点击上方任务卡片查看其日志</div>"));
+            "<div style=\"color:#6c7887;font-family:Consolas,monospace;font-size:12.5px;\">点击上方任务卡片查看其日志</div>"));
     } else {
         taskBadge_->setText(taskId);
         taskBadge_->show();
@@ -151,7 +151,7 @@ void LogPanel::rebuild(const QJsonArray& lines)
     if (lines.isEmpty()) {
         if (!taskId_.isEmpty()) {
             editor_->setHtml(QStringLiteral(
-                "<div style=\"color:#6c7887;font-family:Consolas,monospace;font-size:11px;\">暂无日志 —— 启动任务或触发操作后，输出将实时回放到此环状缓冲区</div>"));
+                "<div style=\"color:#6c7887;font-family:Consolas,monospace;font-size:12.5px;\">暂无日志 —— 启动任务或触发操作后，输出将实时回放到此环状缓冲区</div>"));
         }
         if (autoScroll_) {
             editor_->verticalScrollBar()->setValue(editor_->verticalScrollBar()->maximum());
@@ -170,7 +170,7 @@ void LogPanel::rebuild(const QJsonArray& lines)
         const QString bg = (level == QStringLiteral("ERR"))
             ? QStringLiteral(" style=\"background-color:rgba(240,86,74,0.09);\"")
             : QString();
-        html += QStringLiteral("<div style=\"color:%1;\"%2><span style=\"color:#5a6672;\">%3</span> <b>[%4]</b> %5</div>")
+        html += QStringLiteral("<div style=\"color:%1;font-size:12.5px;\"%2><span style=\"color:#5a6672;\">%3</span> <b>[%4]</b> %5</div>")
                     .arg(color, bg, t.toHtmlEscaped(), level, msg);
     }
     editor_->setHtml(html);
